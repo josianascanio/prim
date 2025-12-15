@@ -9,6 +9,7 @@ import 'package:primware/views/Auth/login_view.dart';
 import 'package:primware/views/Home/dashboard/dashboard_view.dart';
 import 'package:primware/views/Home/order/my_order_new.dart';
 import 'package:primware/views/Home/product/product_view.dart';
+import 'package:primware/views/Home/report/close_cash_view.dart';
 import 'package:primware/views/Home/settings/degub_view.dart';
 import '../shared/toast_message.dart';
 import '../shared/file_picker_helper.dart';
@@ -24,9 +25,7 @@ import 'custom_flat_button.dart';
 import 'logo.dart';
 
 class CustomAppMenu extends StatelessWidget {
-  const CustomAppMenu({
-    super.key,
-  });
+  const CustomAppMenu({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -67,14 +66,14 @@ class _TableDesktopMenuState extends State<_TableDesktopMenu> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Logo(
-                width: 200,
-              ),
+              Logo(width: 200),
               if (!Base.prod) ...[
                 const SizedBox(width: CustomSpacer.large),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.error,
                     borderRadius: BorderRadius.circular(20),
@@ -82,9 +81,9 @@ class _TableDesktopMenuState extends State<_TableDesktopMenu> {
                   child: Text(
                     'Entorno de pruebas',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.surface,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      color: Theme.of(context).colorScheme.surface,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -140,9 +139,7 @@ class _MobileMenu extends StatelessWidget {
                 },
               ),
             ),
-            Logo(
-              width: 150,
-            ),
+            Logo(width: 150),
           ],
         ),
       ),
@@ -237,8 +234,10 @@ class _MenuDrawerState extends State<MenuDrawer> {
               if (POSPrinter.logo != null)
                 GestureDetector(
                   onTap: () async {
-                    final picked =
-                        await pickValidFile(context: context, maxUploadMB: 4);
+                    final picked = await pickValidFile(
+                      context: context,
+                      maxUploadMB: 4,
+                    );
                     if (picked == null) return;
                     final bytes = picked['fileBytes'] as Uint8List;
                     setState(() {
@@ -272,12 +271,15 @@ class _MenuDrawerState extends State<MenuDrawer> {
                   child: Text(
                     AppLocale.yourLogo.getString(context),
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
-                        fontWeight: FontWeight.bold),
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   onPressed: () async {
-                    final picked =
-                        await pickValidFile(context: context, maxUploadMB: 4);
+                    final picked = await pickValidFile(
+                      context: context,
+                      maxUploadMB: 4,
+                    );
                     if (picked == null) return;
                     final bytes = picked['fileBytes'] as Uint8List;
                     setState(() {
@@ -304,19 +306,15 @@ class _MenuDrawerState extends State<MenuDrawer> {
               Text(
                 UserData.name ?? 'Usuario',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
-          const Divider(
-            height: 24,
-          ),
+          const Divider(height: 24),
           ListTile(
-            leading: Icon(
-              Icons.dashboard_outlined,
-            ),
+            leading: Icon(Icons.dashboard_outlined),
             title: Text(
               AppLocale.dashboard.getString(context),
               style: TextStyle(),
@@ -324,44 +322,35 @@ class _MenuDrawerState extends State<MenuDrawer> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const DashboardPage(),
-                ),
+                MaterialPageRoute(builder: (context) => const DashboardPage()),
               );
             },
           ),
           if (POS.docTypesComplete.isEmpty)
             ListTile(
-              leading: Icon(
-                Icons.add,
-              ),
-              title: Text(
-                AppLocale.newOrder.getString(context),
-              ),
+              leading: Icon(Icons.add),
+              title: Text(AppLocale.newOrder.getString(context)),
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const OrderNewPage(),
-                  ),
+                  MaterialPageRoute(builder: (context) => const OrderNewPage()),
                 );
               },
             ),
           if (POS.docTypesComplete.isNotEmpty) ...[
             Column(
               children: [
-                const Divider(
-                  height: 24,
-                ),
+                const Divider(height: 24),
                 Padding(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: CustomSpacer.medium),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: CustomSpacer.medium,
+                  ),
                   child: Text(
                     'Nueva orden',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 ),
                 ...POS.docTypesComplete.map((doc) {
@@ -369,15 +358,16 @@ class _MenuDrawerState extends State<MenuDrawer> {
                   final int? docTypeId = rawId is int
                       ? rawId
                       : int.tryParse(rawId?.toString() ?? '');
-                  final String title =
-                      (doc['name'] ?? doc['Name'] ?? '').toString();
+                  final String title = (doc['name'] ?? doc['Name'] ?? '')
+                      .toString();
                   return ListTile(
                     leading: Icon(
                       (doc['DocSubTypeSO'] == 'RM' ||
                               docTypeId == POS.docTypeRefundID)
                           ? Icons.undo
                           : Icons.add,
-                      color: (doc['DocSubTypeSO'] == 'RM' ||
+                      color:
+                          (doc['DocSubTypeSO'] == 'RM' ||
                               docTypeId == POS.docTypeRefundID)
                           ? Colors.red
                           : null,
@@ -390,7 +380,8 @@ class _MenuDrawerState extends State<MenuDrawer> {
                           builder: (context) => OrderNewPage(
                             doctypeID: docTypeId,
                             orderName: doc['name'],
-                            isRefund: doc['DocSubTypeSO'] == 'RM' ||
+                            isRefund:
+                                doc['DocSubTypeSO'] == 'RM' ||
                                 docTypeId == POS.docTypeRefundID,
                           ),
                         ),
@@ -398,16 +389,12 @@ class _MenuDrawerState extends State<MenuDrawer> {
                     },
                   );
                 }),
-                const Divider(
-                  height: 24,
-                ),
+                const Divider(height: 24),
               ],
             ),
           ],
           ListTile(
-            leading: Icon(
-              Icons.attach_money_outlined,
-            ),
+            leading: Icon(Icons.attach_money_outlined),
             title: Text(
               AppLocale.myOrders.getString(context),
               style: TextStyle(),
@@ -415,19 +402,13 @@ class _MenuDrawerState extends State<MenuDrawer> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const OrderListPage(),
-                ),
+                MaterialPageRoute(builder: (context) => const OrderListPage()),
               );
             },
           ),
           ListTile(
-            leading: Icon(
-              Icons.inventory_2_outlined,
-            ),
-            title: Text(
-              AppLocale.products.getString(context),
-            ),
+            leading: Icon(Icons.inventory_2_outlined),
+            title: Text(AppLocale.products.getString(context)),
             onTap: () {
               Navigator.push(
                 context,
@@ -438,12 +419,8 @@ class _MenuDrawerState extends State<MenuDrawer> {
             },
           ),
           ListTile(
-            leading: Icon(
-              Icons.people_alt_outlined,
-            ),
-            title: Text(
-              AppLocale.customers.getString(context),
-            ),
+            leading: Icon(Icons.people_alt_outlined),
+            title: Text(AppLocale.customers.getString(context)),
             onTap: () {
               Navigator.push(
                 context,
@@ -453,33 +430,32 @@ class _MenuDrawerState extends State<MenuDrawer> {
               );
             },
           ),
+          ListTile(
+            leading: Icon(Icons.preview_outlined),
+            title: Text(AppLocale.reports.getString(context)),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CloseCashPage()),
+              );
+            },
+          ),
           if (!Base.prod)
             ListTile(
-              leading: Icon(
-                Icons.settings,
-              ),
-              title: Text(
-                AppLocale.settings.getString(context),
-              ),
+              leading: Icon(Icons.settings),
+              title: Text(AppLocale.settings.getString(context)),
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const DebugPage(),
-                  ),
+                  MaterialPageRoute(builder: (context) => const DebugPage()),
                 );
               },
             ),
           ListTile(
-            leading: Icon(
-              Icons.logout_outlined,
-              color: ColorTheme.error,
-            ),
+            leading: Icon(Icons.logout_outlined, color: ColorTheme.error),
             title: Text(
               AppLocale.logout.getString(context),
-              style: TextStyle(
-                color: ColorTheme.error,
-              ),
+              style: TextStyle(color: ColorTheme.error),
             ),
             onTap: () async {
               final confirmed = await _showLogoutConfirmation(context);
@@ -488,9 +464,7 @@ class _MenuDrawerState extends State<MenuDrawer> {
 
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const LoginPage(),
-                  ),
+                  MaterialPageRoute(builder: (context) => const LoginPage()),
                 );
               }
             },

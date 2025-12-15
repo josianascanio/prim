@@ -48,6 +48,8 @@ class EndPoints {
 
   static String mPriceList = '${Base.baseURL}/api/v1/models/M_PriceList';
 
+  static String cdsCloseCash = '${Base.baseURL}/api/v1/models/CDS_CloseCash';
+
   static String cOrder = '${Base.baseURL}/api/v1/models/C_Order';
 
   static String cOrderLine = '${Base.baseURL}/api/v1/models/C_OrderLine';

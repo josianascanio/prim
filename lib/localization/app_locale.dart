@@ -23,6 +23,7 @@ class AppLocale {
   static const String pass = 'pass';
   static const String rememberMe = 'remenberLogin';
   static const String onlyMyOrders = 'onlyMyOrders';
+  static const String onlyMyRecords = 'onlyMyRecords';
   static const String server = 'server';
   static const String seeReceipt = 'seeReceipt';
   static const String lang = 'lang';
@@ -45,6 +46,7 @@ class AppLocale {
   static const String invalidCredentials = 'invalidCredentials';
   static const String serverSaved = 'serverSaved';
   static const String customers = 'customers';
+  static const String reports = 'reports';
   static const String searchCustomer = 'searchCustomer';
   static const String add = 'add';
   static const String refresh = 'refresh';
@@ -81,8 +83,10 @@ class AppLocale {
   static const String noDataForFilter = 'noDataForFilter';
   static const String pressAgainToLogout = 'pressAgainToLogout';
   static const String myOrders = 'myOrders';
+  static const String myCloseCash = 'myCloseCash';
   static const String searchOrder = 'searchOrder';
   static const String errorNoOrders = 'errorNoOrders';
+  static const String errorNoRecords = 'errorNoRecords';
   static const String orderHash = 'orderHash';
   static const String exportPdf = 'exportPdf';
   static const String productSummary = 'productSummary';
@@ -184,6 +188,7 @@ class AppLocale {
     login: 'Login',
     user: 'User',
     pass: 'Password',
+    onlyMyRecords: 'Only My Records',
     rememberMe: 'Remember Me',
     server: 'Server',
     lang: 'Language',
@@ -198,6 +203,7 @@ class AppLocale {
     company: 'Company',
     role: 'Role',
     discount: 'Discount',
+    myCloseCash: 'My Close Cash',
     organization: 'Organization',
     selectCompanyRoleOrganization:
         'Please select a company, role, and organization',
@@ -209,11 +215,13 @@ class AppLocale {
     customers: 'Customers',
     searchCustomer: 'Search customer',
     add: 'Add',
+    errorNoRecords: 'No records found.',
     refresh: 'Refresh',
     noAccount: 'No account?',
     register: 'Register',
     newCustomer: 'New Customer',
     nameReq: 'Name *',
+    reports: 'Reports',
     electronicBill: 'Electronic Bill',
     exist: 'Exist',
     seller: 'Seller',
@@ -337,7 +345,9 @@ class AppLocale {
     pass: 'Contraseña',
     rememberMe: 'Recuérdame',
     server: 'Servidor',
+    onlyMyRecords: 'Solo Mis Registros',
     lang: 'Idioma',
+    myCloseCash: 'Mi Cierre de Caja',
     newOrder: 'Nueva Orden',
     customer: 'Cliente',
     process: 'Procesar',
@@ -345,6 +355,7 @@ class AppLocale {
     selectRole: 'Seleccionar Rol',
     company: 'Empresa',
     role: 'Rol',
+    reports: 'Reportes',
     upc: 'UPC',
     organization: 'Organización',
     selectCompanyRoleOrganization: 'Seleccione una empresa, rol y organización',
@@ -366,6 +377,7 @@ class AppLocale {
     nameReq: 'Nombre *',
     personTypeReq: 'Tipo ID *',
     groupReq: 'Grupo *',
+    errorNoRecords: 'No se encontraron registros.',
     seller: 'Vendedor',
     taxId: 'Nro. de identificación',
     email: 'Correo electrónico',
