@@ -35,6 +35,7 @@ class AppLocale {
   static const String selectRole = 'selectRole';
   static const String company = 'company';
   static const String seller = 'seller';
+  static const String terminal = 'terminal';
   static const String role = 'role';
   static const String taxIDOrName = 'taxIDOrName';
   static const String organization = 'organization';
@@ -64,6 +65,7 @@ class AppLocale {
   static const String createCustomer = 'createCustomer';
   static const String register = 'register';
   static const String noAccount = 'noAccount';
+  static const String closeCash = 'closeCash';
 
   static const String confirmCreateCustomer = 'confirmCreateCustomer';
   static const String confirm = 'confirm';
@@ -190,6 +192,7 @@ class AppLocale {
     pass: 'Password',
     onlyMyRecords: 'Only My Records',
     rememberMe: 'Remember Me',
+    closeCash: 'Close Cash',
     server: 'Server',
     lang: 'Language',
     upc: 'UPC',
@@ -270,6 +273,7 @@ class AppLocale {
     name: 'Name',
     description: 'Description',
     priceKey: 'Price',
+    terminal: 'Terminal',
     stockKey: 'Stock',
     category: 'Category',
     addToCart: 'Add to Cart',
@@ -395,6 +399,7 @@ class AppLocale {
     dashboard: 'Panel',
     salesYTDMonthly: 'Total vendido por mes',
     days: 'Días',
+    closeCash: 'Cerrar Caja',
     exist: 'Existencia',
     available: 'Disponible',
     months: 'Meses',
@@ -452,6 +457,7 @@ class AppLocale {
     categories: 'Categorías',
     selectCategories: 'Seleccionar categorías',
     apply: 'Aplicar',
+    terminal: 'Terminal',
     product: 'Producto',
     paymentMethods: 'Métodos de pago',
     paymentSumMustEqualTotal: 'La suma de los pagos debe ser igual al total.',

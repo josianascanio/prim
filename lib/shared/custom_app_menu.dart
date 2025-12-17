@@ -431,8 +431,8 @@ class _MenuDrawerState extends State<MenuDrawer> {
             },
           ),
           ListTile(
-            leading: Icon(Icons.preview_outlined),
-            title: Text(AppLocale.reports.getString(context)),
+            leading: Icon(Icons.print),
+            title: Text(AppLocale.closeCash.getString(context)),
             onTap: () {
               Navigator.push(
                 context,

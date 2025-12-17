@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
+import 'package:primware/API/pos.api.dart';
 import 'package:primware/shared/custom_container.dart';
+import 'package:primware/shared/toast_message.dart';
 import 'package:primware/views/Home/dashboard/dashboard_view.dart';
 
+import '../../../API/user.api.dart';
 import '../../../localization/app_locale.dart';
 import '../../../shared/custom_app_menu.dart';
 import '../../../shared/custom_checkbox.dart';
+import '../../../shared/custom_datefield.dart';
+import '../../../shared/custom_dropdown.dart';
 import '../../../shared/custom_spacer.dart';
 import '../../../shared/footer.dart';
 import '../../../shared/shimmer_list.dart';
+import 'close_cash_detail.dart';
 import 'report_funtions.dart';
 
 class CloseCashPage extends StatefulWidget {
@@ -20,6 +26,13 @@ class CloseCashPage extends StatefulWidget {
 
 class _CloseCashPageState extends State<CloseCashPage> {
   bool _isLoading = true, isSearchLoading = false, onlyMyRecords = true;
+  int? selectedSalesRepID, selectedTerminalID;
+
+  TextEditingController dateTrx = TextEditingController();
+  TextEditingController dateFrom = TextEditingController();
+  List<Map<String, dynamic>> salesRep = [];
+  List<Map<String, dynamic>> terminalList = [];
+
   List<Map<String, dynamic>> _records = [];
   // Mapa de estados de documento (DocStatus) a nombre en español y color
   final Map<String, Map<String, dynamic>> _docStatusMap = {
@@ -111,6 +124,149 @@ class _CloseCashPageState extends State<CloseCashPage> {
     );
   }
 
+  Future<void> _loadSalesRep() async {
+    final fetchedSalesRep = await fetctSalesRep();
+    if (fetchedSalesRep.isNotEmpty) {
+      setState(() {
+        salesRep = fetchedSalesRep;
+        selectedSalesRepID = UserData.id;
+      });
+    }
+  }
+
+  Future<void> _loadTerminals() async {
+    final fetchedTerminals = await fetchTerminals();
+    if (fetchedTerminals.isNotEmpty) {
+      setState(() {
+        terminalList = fetchedTerminals;
+        selectedTerminalID = POS.cPosID;
+      });
+    }
+  }
+
+  void _clearFormFields() {
+    setState(() {
+      selectedTerminalID = null;
+      selectedSalesRepID = null;
+      dateTrx.clear();
+      dateFrom.clear();
+    });
+  }
+
+  Future<void> _showNewCloseCash() async {
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final bool canCreate =
+                selectedTerminalID != null && dateTrx.text.trim().isNotEmpty;
+
+            return AlertDialog(
+              title: Text(
+                AppLocale.closeCash.getString(context),
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SearchableDropdown<int>(
+                    value: selectedTerminalID,
+                    options: terminalList,
+                    showSearchBox: false,
+                    labelText: '${AppLocale.terminal.getString(context)} *',
+                    onChanged: (value) {
+                      setState(() {
+                        selectedTerminalID = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: CustomSpacer.medium),
+                  SearchableDropdown<int>(
+                    value: selectedSalesRepID,
+                    options: salesRep,
+                    showSearchBox: false,
+                    labelText: AppLocale.seller.getString(context),
+                    onChanged: (value) {
+                      setState(() {
+                        selectedSalesRepID = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: CustomSpacer.medium),
+
+                  CustomDateField(
+                    controller: dateFrom,
+                    onChanged: (DateTime? p1) => setDialogState(() {}),
+                    labelText: 'Desde',
+                    includeTime: true,
+                  ),
+                  const SizedBox(height: CustomSpacer.medium),
+
+                  CustomDateField(
+                    controller: dateTrx,
+                    includeTime: true,
+                    onChanged: (DateTime? p1) => setDialogState(() {}),
+                    labelText: 'Hasta *',
+                  ),
+                ],
+              ),
+              actionsAlignment: MainAxisAlignment.spaceBetween,
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _clearFormFields();
+                  },
+                  child: Text('Cancelar'),
+                ),
+
+                ElevatedButton(
+                  onPressed: canCreate
+                      ? () async {
+                          await postNewCloseCash(
+                            context: context,
+                            salesRepID: selectedSalesRepID,
+                            terminalID: selectedTerminalID!,
+                            dateTrx: dateTrx.text.trim(),
+                            dateFrom: dateFrom.text.trim().isNotEmpty
+                                ? dateFrom.text.trim()
+                                : null,
+                          ).then((result) async {
+                            if (result['success'] == true) {
+                              Navigator.of(context).pop();
+                              _clearFormFields();
+                              final refreshed = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      CloseCashDetailPage(record: result),
+                                ),
+                              );
+
+                              if (refreshed == true) {
+                                _fetchRecords();
+                              }
+                            } else {
+                              ToastMessage.show(
+                                context: context,
+                                message: 'No se pudo crear el cierre de caja',
+                                type: ToastType.failure,
+                              );
+                            }
+                          });
+                        }
+                      : null,
+                  child: const Text('Crear'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildRecordsList(List<Map<String, dynamic>> records) {
     if (records.isEmpty) {
       return Center(child: Text(AppLocale.errorNoRecords.getString(context)));
@@ -119,14 +275,16 @@ class _CloseCashPageState extends State<CloseCashPage> {
       children: records.map((record) {
         return GestureDetector(
           onTap: () async {
-            // final refreshed = await Navigator.push(
-            //   context,
-            //   MaterialPageRoute(builder: (_) => OrderDetailPage(order: order)),
-            // );
+            final refreshed = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CloseCashDetailPage(record: record),
+              ),
+            );
 
-            // if (refreshed == true) {
-            //   _fetchRecords();
-            // }
+            if (refreshed == true) {
+              _fetchRecords();
+            }
           },
           child: Container(
             margin: EdgeInsets.only(bottom: 12),
@@ -201,6 +359,8 @@ class _CloseCashPageState extends State<CloseCashPage> {
   void initState() {
     super.initState();
     _fetchRecords();
+    _loadSalesRep();
+    _loadTerminals();
   }
 
   Future<void> _fetchRecords({bool showLoadingIndicator = false}) async {
@@ -236,17 +396,12 @@ class _CloseCashPageState extends State<CloseCashPage> {
       child: Scaffold(
         appBar: AppBar(title: Text(AppLocale.myCloseCash.getString(context))),
         drawer: MenuDrawer(),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            // Navigator.push(
-            //   context,
-            //   MaterialPageRoute(
-            //     builder: (context) => ,
-            //   ),
-            // );
-          },
-          child: const Icon(Icons.add),
-        ),
+        floatingActionButton: (salesRep.isNotEmpty && terminalList.isNotEmpty)
+            ? FloatingActionButton(
+                onPressed: () => _showNewCloseCash(),
+                child: const Icon(Icons.add),
+              )
+            : SizedBox.shrink(),
         bottomNavigationBar: CustomFooter(),
         body: SingleChildScrollView(
           child: Center(
