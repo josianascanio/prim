@@ -1,16 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
-import 'package:primware/API/pos.api.dart';
 import 'package:primware/shared/custom_container.dart';
-import 'package:primware/shared/toast_message.dart';
 import 'package:primware/views/Home/dashboard/dashboard_view.dart';
-
-import '../../../API/user.api.dart';
 import '../../../localization/app_locale.dart';
 import '../../../shared/custom_app_menu.dart';
 import '../../../shared/custom_checkbox.dart';
-import '../../../shared/custom_datefield.dart';
-import '../../../shared/custom_dropdown.dart';
 import '../../../shared/custom_spacer.dart';
 import '../../../shared/footer.dart';
 import '../../../shared/shimmer_list.dart';
