@@ -48,6 +48,8 @@ class EndPoints {
 
   static String mPriceList = '${Base.baseURL}/api/v1/models/M_PriceList';
 
+  static String cdsCloseCash = '${Base.baseURL}/api/v1/models/CDS_CloseCash';
+
   static String cOrder = '${Base.baseURL}/api/v1/models/C_Order';
 
   static String cOrderLine = '${Base.baseURL}/api/v1/models/C_OrderLine';
@@ -162,4 +164,11 @@ class GetDocumentActions {
 
   String get endPoint =>
       '${Base.baseURL}/api/v1/models/AD_Document_Action_Access?\$filter=AD_Role_ID eq $roleID AND C_DocType_ID eq $docTypeID&\$select=AD_Ref_List_ID';
+}
+
+class Processes {
+  static String cdsCloseCashProcess =
+      '${Base.baseURL}/api/v1/processes/cds_closecash_process'; // Action
+  static String closeCash =
+      '${Base.baseURL}/api/v1/processes/closecash'; // Report
 }

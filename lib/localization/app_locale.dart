@@ -23,6 +23,7 @@ class AppLocale {
   static const String pass = 'pass';
   static const String rememberMe = 'remenberLogin';
   static const String onlyMyOrders = 'onlyMyOrders';
+  static const String onlyMyRecords = 'onlyMyRecords';
   static const String server = 'server';
   static const String seeReceipt = 'seeReceipt';
   static const String lang = 'lang';
@@ -34,6 +35,7 @@ class AppLocale {
   static const String selectRole = 'selectRole';
   static const String company = 'company';
   static const String seller = 'seller';
+  static const String terminal = 'terminal';
   static const String role = 'role';
   static const String taxIDOrName = 'taxIDOrName';
   static const String organization = 'organization';
@@ -45,6 +47,7 @@ class AppLocale {
   static const String invalidCredentials = 'invalidCredentials';
   static const String serverSaved = 'serverSaved';
   static const String customers = 'customers';
+  static const String reports = 'reports';
   static const String searchCustomer = 'searchCustomer';
   static const String add = 'add';
   static const String refresh = 'refresh';
@@ -62,6 +65,8 @@ class AppLocale {
   static const String createCustomer = 'createCustomer';
   static const String register = 'register';
   static const String noAccount = 'noAccount';
+  static const String closeCash = 'closeCash';
+  static const String mycloseCashs = 'mycloseCashs';
 
   static const String confirmCreateCustomer = 'confirmCreateCustomer';
   static const String confirm = 'confirm';
@@ -81,8 +86,10 @@ class AppLocale {
   static const String noDataForFilter = 'noDataForFilter';
   static const String pressAgainToLogout = 'pressAgainToLogout';
   static const String myOrders = 'myOrders';
+
   static const String searchOrder = 'searchOrder';
   static const String errorNoOrders = 'errorNoOrders';
+  static const String errorNoRecords = 'errorNoRecords';
   static const String orderHash = 'orderHash';
   static const String exportPdf = 'exportPdf';
   static const String productSummary = 'productSummary';
@@ -184,7 +191,10 @@ class AppLocale {
     login: 'Login',
     user: 'User',
     pass: 'Password',
+    mycloseCashs: 'My Close Cashs',
+    onlyMyRecords: 'Only My Records',
     rememberMe: 'Remember Me',
+    closeCash: 'Close Cash',
     server: 'Server',
     lang: 'Language',
     upc: 'UPC',
@@ -198,6 +208,7 @@ class AppLocale {
     company: 'Company',
     role: 'Role',
     discount: 'Discount',
+
     organization: 'Organization',
     selectCompanyRoleOrganization:
         'Please select a company, role, and organization',
@@ -209,11 +220,13 @@ class AppLocale {
     customers: 'Customers',
     searchCustomer: 'Search customer',
     add: 'Add',
+    errorNoRecords: 'No records found.',
     refresh: 'Refresh',
     noAccount: 'No account?',
     register: 'Register',
     newCustomer: 'New Customer',
     nameReq: 'Name *',
+    reports: 'Reports',
     electronicBill: 'Electronic Bill',
     exist: 'Exist',
     seller: 'Seller',
@@ -262,6 +275,7 @@ class AppLocale {
     name: 'Name',
     description: 'Description',
     priceKey: 'Price',
+    terminal: 'Terminal',
     stockKey: 'Stock',
     category: 'Category',
     addToCart: 'Add to Cart',
@@ -337,7 +351,9 @@ class AppLocale {
     pass: 'Contraseña',
     rememberMe: 'Recuérdame',
     server: 'Servidor',
+    onlyMyRecords: 'Solo Mis Registros',
     lang: 'Idioma',
+
     newOrder: 'Nueva Orden',
     customer: 'Cliente',
     process: 'Procesar',
@@ -345,7 +361,9 @@ class AppLocale {
     selectRole: 'Seleccionar Rol',
     company: 'Empresa',
     role: 'Rol',
+    reports: 'Reportes',
     upc: 'UPC',
+    mycloseCashs: 'Mis Cierres de Caja',
     organization: 'Organización',
     selectCompanyRoleOrganization: 'Seleccione una empresa, rol y organización',
     continueKey: 'Continuar',
@@ -366,6 +384,7 @@ class AppLocale {
     nameReq: 'Nombre *',
     personTypeReq: 'Tipo ID *',
     groupReq: 'Grupo *',
+    errorNoRecords: 'No se encontraron registros.',
     seller: 'Vendedor',
     taxId: 'Nro. de identificación',
     email: 'Correo electrónico',
@@ -383,6 +402,7 @@ class AppLocale {
     dashboard: 'Panel',
     salesYTDMonthly: 'Total vendido por mes',
     days: 'Días',
+    closeCash: 'Cerrar Caja',
     exist: 'Existencia',
     available: 'Disponible',
     months: 'Meses',
@@ -440,6 +460,7 @@ class AppLocale {
     categories: 'Categorías',
     selectCategories: 'Seleccionar categorías',
     apply: 'Aplicar',
+    terminal: 'Terminal',
     product: 'Producto',
     paymentMethods: 'Métodos de pago',
     paymentSumMustEqualTotal: 'La suma de los pagos debe ser igual al total.',

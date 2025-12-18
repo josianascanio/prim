@@ -343,7 +343,6 @@ class OrderDetailPage extends StatelessWidget {
     );
   }
 
-  // Chip/pill que muestra el estado del documento (DocStatus) en español
   Widget _buildDocStatusPill(BuildContext context, Map<String, dynamic> order) {
     final String? statusCode = order['DocStatus'] as String?;
     if (statusCode == null || statusCode.isEmpty) {
