@@ -25,13 +25,7 @@ class CloseCashPage extends StatefulWidget {
 }
 
 class _CloseCashPageState extends State<CloseCashPage> {
-  bool _isLoading = true, isSearchLoading = false, onlyMyRecords = true;
-  int? selectedSalesRepID, selectedTerminalID;
-
-  TextEditingController dateTrx = TextEditingController();
-  TextEditingController dateFrom = TextEditingController();
-  List<Map<String, dynamic>> salesRep = [];
-  List<Map<String, dynamic>> terminalList = [];
+  bool _isLoading = true, onlyMyRecords = true;
 
   List<Map<String, dynamic>> _records = [];
   // Mapa de estados de documento (DocStatus) a nombre en español y color
@@ -121,149 +115,6 @@ class _CloseCashPageState extends State<CloseCashPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Future<void> _loadSalesRep() async {
-    final fetchedSalesRep = await fetctSalesRep();
-    if (fetchedSalesRep.isNotEmpty) {
-      setState(() {
-        salesRep = fetchedSalesRep;
-        selectedSalesRepID = UserData.id;
-      });
-    }
-  }
-
-  Future<void> _loadTerminals() async {
-    final fetchedTerminals = await fetchTerminals();
-    if (fetchedTerminals.isNotEmpty) {
-      setState(() {
-        terminalList = fetchedTerminals;
-        selectedTerminalID = POS.cPosID;
-      });
-    }
-  }
-
-  void _clearFormFields() {
-    setState(() {
-      selectedTerminalID = null;
-      selectedSalesRepID = null;
-      dateTrx.clear();
-      dateFrom.clear();
-    });
-  }
-
-  Future<void> _showNewCloseCash() async {
-    return showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final bool canCreate =
-                selectedTerminalID != null && dateTrx.text.trim().isNotEmpty;
-
-            return AlertDialog(
-              title: Text(
-                AppLocale.closeCash.getString(context),
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SearchableDropdown<int>(
-                    value: selectedTerminalID,
-                    options: terminalList,
-                    showSearchBox: false,
-                    labelText: '${AppLocale.terminal.getString(context)} *',
-                    onChanged: (value) {
-                      setState(() {
-                        selectedTerminalID = value;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: CustomSpacer.medium),
-                  SearchableDropdown<int>(
-                    value: selectedSalesRepID,
-                    options: salesRep,
-                    showSearchBox: false,
-                    labelText: AppLocale.seller.getString(context),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedSalesRepID = value;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: CustomSpacer.medium),
-
-                  CustomDateField(
-                    controller: dateFrom,
-                    onChanged: (DateTime? p1) => setDialogState(() {}),
-                    labelText: 'Desde',
-                    includeTime: true,
-                  ),
-                  const SizedBox(height: CustomSpacer.medium),
-
-                  CustomDateField(
-                    controller: dateTrx,
-                    includeTime: true,
-                    onChanged: (DateTime? p1) => setDialogState(() {}),
-                    labelText: 'Hasta *',
-                  ),
-                ],
-              ),
-              actionsAlignment: MainAxisAlignment.spaceBetween,
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _clearFormFields();
-                  },
-                  child: Text('Cancelar'),
-                ),
-
-                ElevatedButton(
-                  onPressed: canCreate
-                      ? () async {
-                          await postNewCloseCash(
-                            context: context,
-                            salesRepID: selectedSalesRepID,
-                            terminalID: selectedTerminalID!,
-                            dateTrx: dateTrx.text.trim(),
-                            dateFrom: dateFrom.text.trim().isNotEmpty
-                                ? dateFrom.text.trim()
-                                : null,
-                          ).then((result) async {
-                            if (result['success'] == true) {
-                              Navigator.of(context).pop();
-                              _clearFormFields();
-                              final refreshed = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      CloseCashDetailPage(record: result),
-                                ),
-                              );
-
-                              if (refreshed == true) {
-                                _fetchRecords();
-                              }
-                            } else {
-                              ToastMessage.show(
-                                context: context,
-                                message: 'No se pudo crear el cierre de caja',
-                                type: ToastType.failure,
-                              );
-                            }
-                          });
-                        }
-                      : null,
-                  child: const Text('Crear'),
-                ),
-              ],
-            );
-          },
-        );
-      },
     );
   }
 
@@ -359,18 +210,10 @@ class _CloseCashPageState extends State<CloseCashPage> {
   void initState() {
     super.initState();
     _fetchRecords();
-    _loadSalesRep();
-    _loadTerminals();
   }
 
-  Future<void> _fetchRecords({bool showLoadingIndicator = false}) async {
-    setState(() {
-      if (showLoadingIndicator) {
-        isSearchLoading = true;
-      }
-
-      _isLoading = true;
-    });
+  Future<void> _fetchRecords() async {
+    setState(() => _isLoading = true);
 
     final result = await fetchRecords(
       context: context,
@@ -379,7 +222,6 @@ class _CloseCashPageState extends State<CloseCashPage> {
     setState(() {
       _records = result;
       _isLoading = false;
-      isSearchLoading = false;
     });
   }
 
@@ -394,14 +236,9 @@ class _CloseCashPageState extends State<CloseCashPage> {
         return Future.value(false);
       },
       child: Scaffold(
-        appBar: AppBar(title: Text(AppLocale.myCloseCash.getString(context))),
+        appBar: AppBar(title: Text(AppLocale.mycloseCashs.getString(context))),
         drawer: MenuDrawer(),
-        floatingActionButton: (salesRep.isNotEmpty && terminalList.isNotEmpty)
-            ? FloatingActionButton(
-                onPressed: () => _showNewCloseCash(),
-                child: const Icon(Icons.add),
-              )
-            : SizedBox.shrink(),
+
         bottomNavigationBar: CustomFooter(),
         body: SingleChildScrollView(
           child: Center(
@@ -415,7 +252,7 @@ class _CloseCashPageState extends State<CloseCashPage> {
                     onChanged: (newValue) {
                       setState(() {
                         onlyMyRecords = newValue;
-                        _fetchRecords(showLoadingIndicator: true);
+                        _fetchRecords();
                       });
                     },
                   ),

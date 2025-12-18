@@ -7,6 +7,7 @@ import 'package:primware/shared/custom_spacer.dart';
 import 'package:primware/shared/toast_message.dart';
 import '../../../API/endpoint.api.dart';
 import '../../../localization/app_locale.dart';
+import '../../../shared/custom_app_menu.dart';
 import '../../../shared/footer.dart';
 import '../../../shared/loading_container.dart';
 import 'report_print.dart';
@@ -200,11 +201,8 @@ class _CloseCashDetailPageState extends State<CloseCashDetailPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppLocale.myCloseCash.getString(context)),
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          icon: Icon(Icons.arrow_back_ios),
-        ),
+        title: Text(AppLocale.closeCash.getString(context)),
+
         actions: [
           _loading
               ? Container()
@@ -227,7 +225,7 @@ class _CloseCashDetailPageState extends State<CloseCashDetailPage> {
                 ),
         ],
       ),
-
+      drawer: MenuDrawer(),
       bottomNavigationBar: CustomFooter(),
       body: Center(
         child: _loading
@@ -455,23 +453,6 @@ class _CloseCashDetailPageState extends State<CloseCashDetailPage> {
                         ),
                       if (!processed) ...[
                         const SizedBox(height: CustomSpacer.large),
-                        ButtonSecondary(
-                          texto: 'Actualizar Cierre de Caja',
-                          fullWidth: true,
-                          icono: Icons.refresh_outlined,
-                          onPressed: () async {
-                            setState(() {
-                              _loading = true;
-                            });
-                            await refreshCloseCash(
-                              cdsCloseCashID:
-                                  widget.record['id'] ??
-                                  widget.record['Record_ID'],
-                            );
-                            await _load();
-                          },
-                        ),
-                        const SizedBox(height: CustomSpacer.medium),
                         ButtonPrimary(
                           texto: 'Cerrar Caja',
                           fullWidth: true,

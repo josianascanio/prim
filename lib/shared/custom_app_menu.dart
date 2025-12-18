@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
+import 'package:intl/intl.dart';
 import 'package:primware/API/token.api.dart';
 import 'package:primware/shared/custom_spacer.dart';
 import 'package:primware/views/Auth/login_view.dart';
@@ -21,6 +22,8 @@ import '../theme/colors.dart';
 import '../views/Home/bpartner/bpartner_view.dart';
 import '../views/Home/dashboard/dashboard_funtions.dart';
 import '../views/Home/order/my_order.dart';
+import '../views/Home/report/close_cash_detail.dart';
+import '../views/Home/report/report_funtions.dart';
 import 'custom_flat_button.dart';
 import 'logo.dart';
 
@@ -155,6 +158,7 @@ class MenuDrawer extends StatefulWidget {
 }
 
 class _MenuDrawerState extends State<MenuDrawer> {
+  bool _isCreatingCloseCash = false;
   @override
   void initState() {
     super.initState();
@@ -341,18 +345,6 @@ class _MenuDrawerState extends State<MenuDrawer> {
             Column(
               children: [
                 const Divider(height: 24),
-                Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: CustomSpacer.medium,
-                  ),
-                  child: Text(
-                    'Nueva orden',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ),
                 ...POS.docTypesComplete.map((doc) {
                   final dynamic rawId = doc['id'];
                   final int? docTypeId = rawId is int
@@ -393,6 +385,102 @@ class _MenuDrawerState extends State<MenuDrawer> {
               ],
             ),
           ],
+          if (POS.isPOS) ...[
+            ListTile(
+              leading: _isCreatingCloseCash
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.print),
+              title: Text(AppLocale.closeCash.getString(context)),
+              onTap: _isCreatingCloseCash
+                  ? null
+                  : () async {
+                      setState(() => _isCreatingCloseCash = true);
+
+                      // Verificar si ya hay un cierre de caja abierto
+                      int? closeCashId = await currentCloseCash();
+                      if (closeCashId != null) {
+                        await updateCloseCashDateTrx(
+                          cdsCloseCashID: closeCashId,
+                        );
+                        await refreshCloseCash(cdsCloseCashID: closeCashId);
+
+                        if (!mounted) return;
+                        setState(() => _isCreatingCloseCash = false);
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CloseCashDetailPage(
+                              record: {
+                                'success': true,
+                                'Record_ID': closeCashId,
+                              },
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      final String nowText = DateFormat(
+                        'yyyy-MM-dd HH:mm:ss',
+                      ).format(DateTime.now());
+
+                      try {
+                        final result = await postNewCloseCash(
+                          context: context,
+                          salesRepID: UserData.id,
+                          terminalID: POS.cPosID!,
+                          dateTrx: nowText,
+                        );
+
+                        if (!mounted) return;
+                        setState(() => _isCreatingCloseCash = false);
+
+                        if (result['success'] == true) {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  CloseCashDetailPage(record: result),
+                            ),
+                          );
+                        } else {
+                          ToastMessage.show(
+                            context: context,
+                            message: 'No se pudo crear el cierre de caja',
+                            type: ToastType.failure,
+                          );
+                        }
+                      } catch (e) {
+                        if (!mounted) return;
+                        setState(() => _isCreatingCloseCash = false);
+                        ToastMessage.show(
+                          context: context,
+                          message: 'Error al crear el cierre de caja',
+                          type: ToastType.failure,
+                        );
+                      }
+                    },
+            ),
+
+            ListTile(
+              leading: Icon(Icons.list_alt_outlined),
+              title: Text(AppLocale.mycloseCashs.getString(context)),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CloseCashPage(),
+                  ),
+                );
+              },
+            ),
+            const Divider(height: 24),
+          ],
           ListTile(
             leading: Icon(Icons.attach_money_outlined),
             title: Text(
@@ -430,16 +518,7 @@ class _MenuDrawerState extends State<MenuDrawer> {
               );
             },
           ),
-          ListTile(
-            leading: Icon(Icons.print),
-            title: Text(AppLocale.closeCash.getString(context)),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const CloseCashPage()),
-              );
-            },
-          ),
+
           if (!Base.prod)
             ListTile(
               leading: Icon(Icons.settings),

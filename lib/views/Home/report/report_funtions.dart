@@ -1,9 +1,7 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart';
 import 'package:intl/intl.dart';
-
 import '../../../API/endpoint.api.dart';
 import '../../../API/token.api.dart';
 import '../../../API/user.api.dart';
@@ -167,105 +165,21 @@ Future<Map<String, dynamic>?> fetchCloseCash({
   }
 }
 
-Future<List<Map<String, dynamic>>> fetctSalesRep() async {
-  try {
-    final response = await get(
-      Uri.parse(EndPoints.salesRep),
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': Token.auth!,
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
-      final records = (jsonResponse['records'] as List?) ?? const [];
-
-      final List<Map<String, dynamic>> reps = [];
-      for (final record in records) {
-        final adUsers = (record['AD_User'] as List?) ?? const [];
-        if (adUsers.isEmpty) {
-          continue;
-        }
-        final adUserId = adUsers.first['id'];
-        final name = record['Name'];
-        if (adUserId == null || name == null) {
-          continue;
-        }
-        reps.add({'id': adUserId, 'name': name});
-      }
-      return reps;
-    } else {
-      throw Exception(
-        'Error al cargar los representantes comerciales: ${response.statusCode}',
-      );
-    }
-  } catch (e) {
-    CurrentLogMessage.add(
-      'Excepción al obtener los representantes comerciales: $e',
-      level: 'ERROR',
-      tag: 'fetctSalesRep',
-    );
-    return [];
-  }
-}
-
-Future<List<Map<String, dynamic>>> fetchTerminals() async {
-  try {
-    final response = await get(
-      Uri.parse(EndPoints.cPos),
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': Token.auth!,
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
-      final records = (jsonResponse['records'] as List?) ?? const [];
-
-      final List<Map<String, dynamic>> reps = [];
-      for (final record in records) {
-        final id = record['id'];
-        final name = record['Name'];
-        if (id == null || name == null) {
-          continue;
-        }
-        reps.add({'id': id, 'name': name});
-      }
-      return reps;
-    } else {
-      throw Exception('Error al cargar los terminales: ${response.statusCode}');
-    }
-  } catch (e) {
-    CurrentLogMessage.add(
-      'Excepción al obtener los terminales: $e',
-      level: 'ERROR',
-      tag: 'fetchTerminals',
-    );
-    return [];
-  }
-}
-
 Future<Map<String, dynamic>> postNewCloseCash({
   int? salesRepID,
   required int terminalID,
   required String dateTrx,
-  String? dateFrom,
+
   required BuildContext context,
 }) async {
   try {
     await usuarioAuth(context: context);
     final String dateTrxIso = _toIsoUtcZ(dateTrx);
-    final String? dateFromIso = (dateFrom != null && dateFrom.trim().isNotEmpty)
-        ? _toIsoUtcZ(dateFrom)
-        : null;
 
     final Map<String, dynamic> data = {
       if (salesRepID != null) "SalesRep_ID": {"id": salesRepID},
       "C_POS_ID": {"id": terminalID},
       "DateTrx": dateTrxIso,
-      if (dateFromIso != null) "DateFrom": dateFromIso,
     };
 
     final response = await post(
@@ -350,10 +264,16 @@ String _toIsoUtcZ(String input) {
   if (RegExp(r"Z$").hasMatch(s) && s.contains('T')) return s;
 
   DateTime dt;
-  if (s.length == 10) {
-    dt = DateFormat('yyyy-MM-dd').parseStrict(s);
-  } else {
-    dt = DateFormat('yyyy-MM-dd HH:mm').parseStrict(s);
+  try {
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) {
+      dt = DateFormat('yyyy-MM-dd').parseStrict(s);
+    } else if (RegExp(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$').hasMatch(s)) {
+      dt = DateFormat('yyyy-MM-dd HH:mm:ss').parseStrict(s);
+    } else {
+      dt = DateFormat('yyyy-MM-dd HH:mm').parseStrict(s);
+    }
+  } catch (e) {
+    throw FormatException('Formato de fecha no soportado: $s');
   }
 
   return DateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").format(dt.toLocal());
@@ -395,5 +315,73 @@ Future<Map<String, dynamic>> updateCloseCashStatus({
       tag: 'updateCloseCashStatus',
     );
     return {'success': false, 'message': 'Excepción inesperada: $e'};
+  }
+}
+
+Future<Map<String, dynamic>> updateCloseCashDateTrx({
+  required int cdsCloseCashID,
+}) async {
+  try {
+    final String nowText = DateFormat(
+      'yyyy-MM-dd HH:mm:ss',
+    ).format(DateTime.now());
+    final String dateTrxIso = _toIsoUtcZ(nowText);
+    final Map<String, dynamic> data = {"DateTrx": dateTrxIso};
+
+    final response = await put(
+      Uri.parse('${EndPoints.cdsCloseCash}/$cdsCloseCashID'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': Token.auth!,
+      },
+      body: jsonEncode(data),
+    );
+
+    if (response.statusCode != 200) {
+      CurrentLogMessage.add(
+        'Error al cerrar el cierre de caja: ${response.body}',
+        level: 'ERROR',
+        tag: 'updateCloseCashStatus',
+      );
+
+      return {
+        'success': false,
+        'message': 'Error al cerrar el cierre de caja.',
+      };
+    }
+
+    return {'success': true};
+  } catch (e) {
+    CurrentLogMessage.add(
+      'Excepción general: $e',
+      level: 'ERROR',
+      tag: 'updateCloseCashStatus',
+    );
+    return {'success': false, 'message': 'Excepción inesperada: $e'};
+  }
+}
+
+Future<int?> currentCloseCash() async {
+  final response = await get(
+    Uri.parse(
+      "${EndPoints.cdsCloseCash}?\$filter=DocStatus eq 'DR' and SalesRep_ID eq ${UserData.id}",
+    ),
+    headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
+  );
+
+  if (response.statusCode == 200) {
+    final data = json.decode(response.body);
+    final List records = data['records'] ?? [];
+
+    if (records.isEmpty) {
+      return null;
+    }
+
+    return records.first['id'] as int;
+  } else {
+    debugPrint(
+      'Error al verificar usuario: ${response.statusCode}, ${response.body}',
+    );
+    return null;
   }
 }

@@ -398,18 +398,9 @@ Future<List<Map<String, dynamic>>> fetchOrders({
   try {
     await usuarioAuth(context: context);
 
-    final docStatusFilter =
-        '(DocStatus eq \'CO\' or DocStatus eq \'CL\' or DocStatus eq \'PR\' or DocStatus eq \'PI\' or DocStatus eq \'DR\') and contains(DocumentNo, \'$filter\')';
-
-    if (filter == null || filter.isEmpty) {
-      filter = onlyMyOrders == true
-          ? 'SalesRep_ID eq ${UserData.id} and $docStatusFilter'
-          : docStatusFilter;
-    } else {
-      filter = onlyMyOrders == true
-          ? 'SalesRep_ID eq ${UserData.id} and $docStatusFilter and contains(DocumentNo, \'$filter\')'
-          : '$docStatusFilter and contains(DocumentNo, \'$filter\')';
-    }
+    filter = onlyMyOrders == true
+        ? 'SalesRep_ID eq ${UserData.id} and contains(DocumentNo, \'$filter\')'
+        : 'contains(DocumentNo, \'$filter\')';
 
     final response = await get(
       Uri.parse(

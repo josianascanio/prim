@@ -66,6 +66,7 @@ class AppLocale {
   static const String register = 'register';
   static const String noAccount = 'noAccount';
   static const String closeCash = 'closeCash';
+  static const String mycloseCashs = 'mycloseCashs';
 
   static const String confirmCreateCustomer = 'confirmCreateCustomer';
   static const String confirm = 'confirm';
@@ -85,7 +86,7 @@ class AppLocale {
   static const String noDataForFilter = 'noDataForFilter';
   static const String pressAgainToLogout = 'pressAgainToLogout';
   static const String myOrders = 'myOrders';
-  static const String myCloseCash = 'myCloseCash';
+
   static const String searchOrder = 'searchOrder';
   static const String errorNoOrders = 'errorNoOrders';
   static const String errorNoRecords = 'errorNoRecords';
@@ -190,6 +191,7 @@ class AppLocale {
     login: 'Login',
     user: 'User',
     pass: 'Password',
+    mycloseCashs: 'My Close Cashs',
     onlyMyRecords: 'Only My Records',
     rememberMe: 'Remember Me',
     closeCash: 'Close Cash',
@@ -206,7 +208,7 @@ class AppLocale {
     company: 'Company',
     role: 'Role',
     discount: 'Discount',
-    myCloseCash: 'My Close Cash',
+
     organization: 'Organization',
     selectCompanyRoleOrganization:
         'Please select a company, role, and organization',
@@ -351,7 +353,7 @@ class AppLocale {
     server: 'Servidor',
     onlyMyRecords: 'Solo Mis Registros',
     lang: 'Idioma',
-    myCloseCash: 'Mi Cierre de Caja',
+
     newOrder: 'Nueva Orden',
     customer: 'Cliente',
     process: 'Procesar',
@@ -361,6 +363,7 @@ class AppLocale {
     role: 'Rol',
     reports: 'Reportes',
     upc: 'UPC',
+    mycloseCashs: 'Mis Cierres de Caja',
     organization: 'Organización',
     selectCompanyRoleOrganization: 'Seleccione una empresa, rol y organización',
     continueKey: 'Continuar',
