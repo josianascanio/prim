@@ -391,7 +391,7 @@ class OrderDetailPage extends StatelessWidget {
                 }
                 final bool? confirm = await _refundConfirmation(context);
                 if (confirm == true) {
-                  await Navigator.push(
+                  final completed = await Navigator.push<bool>(
                     context,
                     MaterialPageRoute(
                       builder: (_) => OrderNewPage(
@@ -402,7 +402,7 @@ class OrderDetailPage extends StatelessWidget {
                       ),
                     ),
                   );
-                  if (context.mounted) Navigator.pop(context, true);
+                  if (context.mounted && completed == true) Navigator.pop(context, true);
                 }
               }
 

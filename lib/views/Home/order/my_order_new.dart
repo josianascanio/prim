@@ -1661,21 +1661,23 @@ class _OrderNewPageState extends State<OrderNewPage> {
   }
 
   Future<void> _createInvoice({required List<Map<String, dynamic>> product, required int bPartner}) async {
-    if (!await _ensurePricesValid()) return;
-    if (widget.isRefund && widget.sourceOrderId != null) {
-      try {
-        final alreadyReturned = await hasActiveReturnForOrder(orderId: widget.sourceOrderId!);
-        if (alreadyReturned) {
-          if (!mounted) return;
-          ToastMessage.show(context: context, message: AppLocale.returnAlreadyExists.getString(context), type: ToastType.warning);
-          return;
-        }
-      } catch (_) {
-        if (!mounted) return;
-        ToastMessage.show(context: context, message: AppLocale.returnValidationError.getString(context), type: ToastType.failure);
-        return;
+    if (isSending || !mounted) return;
+
+    setState(() => isSending = true);
+    try {
+      await _createInvoiceOnce(product: product, bPartner: bPartner);
+    } finally {
+      if (mounted) {
+        setState(() => isSending = false);
+      } else {
+        isSending = false;
       }
     }
+  }
+
+  Future<void> _createInvoiceOnce({required List<Map<String, dynamic>> product, required int bPartner}) async {
+    if (!await _ensurePricesValid()) return;
+    if (!mounted) return;
     final String actionLabel = (() {
       try {
         final match = POS.documentActions.firstWhere(
@@ -1688,7 +1690,8 @@ class _OrderNewPageState extends State<OrderNewPage> {
       }
     })();
 
-    final confirm = await showDialog(
+    if (!mounted) return;
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -1711,7 +1714,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
       },
     );
 
-    if (confirm != true) return;
+    if (!mounted || confirm != true) return;
 
     if (widget.isRefund && widget.sourceOrderId != null) {
       try {
@@ -1727,7 +1730,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
       }
     }
 
-    setState(() => isSending = true);
+    if (!mounted) return;
     final List<Map<String, dynamic>> invoiceLine = product.map((item) {
       final double price = _r2(item['price'] ?? 0);
       final double priceList = _r2(item['PriceList'] ?? item['priceList'] ?? item['price'] ?? 0);
@@ -1801,9 +1804,17 @@ class _OrderNewPageState extends State<OrderNewPage> {
       sourceOrderId: widget.sourceOrderId,
     );
 
+    if (!mounted) return;
     if (result['success'] == true) {
-      if (_resumedTicketId != null) {
+      if (widget.isRefund && widget.sourceOrderId != null) {
+        await HeldTicketStore.instance.deleteRefundsForSourceOrder(widget.sourceOrderId!);
+        if (!mounted) return;
+        _resumedTicketId = null;
+        _resumedTicketCreatedAt = null;
+        HeldTicketStore.instance.activeTicketId = null;
+      } else if (_resumedTicketId != null) {
         await HeldTicketStore.instance.delete(_resumedTicketId!);
+        if (!mounted) return;
         _resumedTicketId = null;
         _resumedTicketCreatedAt = null;
         HeldTicketStore.instance.activeTicketId = null;
@@ -1821,13 +1832,16 @@ class _OrderNewPageState extends State<OrderNewPage> {
             actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(AppLocale.close.getString(context)))],
           ),
         );
+        if (!mounted) return;
       }
 
       final Map<String, dynamic>? order = await fetchOrderById(orderId: int.parse(result['Record_ID'].toString()), context: context);
 
+      if (!mounted) return;
       if (order != null) {
         if (POS.isPOS == true) {
           final confirmPrintTicket = await _printTicketConfirmation(context);
+          if (!mounted) return;
           if (confirmPrintTicket == true) {
             try {
               final pdfBytes = await generatePOSTicket(order);
@@ -1855,9 +1869,10 @@ class _OrderNewPageState extends State<OrderNewPage> {
               } catch (_) {}
             }
           }
-        } else {
+        } else if (!widget.isRefund) {
           //? Mostrar detalle de la orden [NO Es POS]
           await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderDetailPage(order: order)));
+          if (!mounted) return;
         }
       }
       ToastMessage.show(
@@ -1865,6 +1880,11 @@ class _OrderNewPageState extends State<OrderNewPage> {
         message: widget.isRefund ? AppLocale.creditNote.getString(context) : AppLocale.newOrder.getString(context),
         type: ToastType.success,
       );
+
+      if (widget.isRefund && widget.sourceOrderId != null) {
+        Navigator.pop(context, true);
+        return;
+      }
 
       clearInvoiceFields();
       _loadSequence();
@@ -1886,7 +1906,6 @@ class _OrderNewPageState extends State<OrderNewPage> {
         type: ToastType.failure,
       );
     }
-    setState(() => isSending = false);
   }
 
   Map<String, double> getGroupedTaxTotals() {
@@ -1922,8 +1941,8 @@ class _OrderNewPageState extends State<OrderNewPage> {
 
     return WillPopScope(
       onWillPop: () async {
-        //TODO manejar lo de cancelar el yappy si me salgo
-
+        if (isSending) return false;
+        await _autoPutOnHold();
         return true;
       },
       child: Scaffold(

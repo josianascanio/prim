@@ -6,6 +6,7 @@ import '../../../shared/custom_app_menu.dart';
 import '../../../shared/format_date.dart';
 import '../../../shared/footer.dart';
 import 'held_ticket.dart';
+import 'my_order.dart';
 import 'my_order_new.dart';
 import 'order_funtions.dart';
 
@@ -96,7 +97,7 @@ class _HeldTicketPageState extends State<HeldTicketPage> {
     final currentTicket = storedTickets.firstWhere((item) => item.id == ticket.id, orElse: () => ticket);
     if (!mounted) return;
     final data = currentTicket.data;
-    await Navigator.pushReplacement(
+    final completed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => OrderNewPage(
@@ -109,6 +110,12 @@ class _HeldTicketPageState extends State<HeldTicketPage> {
         ),
       ),
     );
+    if (!mounted) return;
+    if (completed == true && data['isRefund'] == true && data['sourceOrderId'] != null) {
+      await Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const OrderListPage()));
+      return;
+    }
+    setState(_reload);
   }
 
   @override
@@ -147,6 +154,7 @@ class _HeldTicketPageState extends State<HeldTicketPage> {
                       : (data['isRefund'] == true ? AppLocale.creditNote.getString(context) : AppLocale.newOrder.getString(context));
                   final customer = data['customerName']?.toString().trim();
                   final total = (data['total'] as num?)?.toDouble() ?? 0;
+                  final isRefund = data['isRefund'] == true;
                   final paymentDetails = data['paymentDetails'] is List
                       ? data['paymentDetails'] as List
                       : data['payments'] is Map
@@ -161,18 +169,30 @@ class _HeldTicketPageState extends State<HeldTicketPage> {
                             .toList()
                       : const [];
                   final colorScheme = Theme.of(context).colorScheme;
+                  final ticketColor = isRefund ? colorScheme.error : colorScheme.primary;
+                  final ticketBackground = isRefund
+                      ? Color.alphaBlend(
+                          colorScheme.error.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.12 : 0.06),
+                          colorScheme.surface,
+                        )
+                      : null;
                   return Card(
                     elevation: 2,
                     clipBehavior: Clip.antiAlias,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    color: ticketBackground,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: isRefund ? BorderSide(color: colorScheme.error.withOpacity(0.4)) : BorderSide.none,
+                    ),
                     child: ExpansionTile(
                       tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                      backgroundColor: colorScheme.primary.withOpacity(0.025),
+                      backgroundColor: ticketColor.withOpacity(isRefund ? 0.08 : 0.025),
+                      collapsedBackgroundColor: ticketBackground,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      iconColor: colorScheme.primary,
-                      collapsedIconColor: colorScheme.primary,
+                      iconColor: ticketColor,
+                      collapsedIconColor: ticketColor,
                       title: Row(
                         children: [
                           Expanded(
@@ -180,9 +200,7 @@ class _HeldTicketPageState extends State<HeldTicketPage> {
                               title,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(
-                                context,
-                              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700, color: colorScheme.primary),
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700, color: ticketColor),
                             ),
                           ),
                           IconButton(
@@ -195,6 +213,8 @@ class _HeldTicketPageState extends State<HeldTicketPage> {
                           const SizedBox(width: 4),
                           FilledButton(
                             style: FilledButton.styleFrom(
+                              backgroundColor: isRefund ? colorScheme.error : null,
+                              foregroundColor: isRefund ? colorScheme.onError : null,
                               visualDensity: VisualDensity.compact,
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                             ),
@@ -221,7 +241,7 @@ class _HeldTicketPageState extends State<HeldTicketPage> {
                                 _InfoBadge(
                                   icon: Icons.inventory_2_outlined,
                                   text: AppLocale.heldTicketProducts.getString(context).replaceAll('{count}', lines.length.toString()),
-                                  color: colorScheme.primary,
+                                  color: ticketColor,
                                 ),
                                 _InfoBadge(
                                   icon: Icons.attach_money_rounded,
@@ -231,7 +251,7 @@ class _HeldTicketPageState extends State<HeldTicketPage> {
                                 _InfoBadge(
                                   icon: Icons.schedule_rounded,
                                   text: formatDateUI(ticket.updatedAt.toIso8601String()),
-                                  color: colorScheme.secondary,
+                                  color: isRefund ? ticketColor : colorScheme.secondary,
                                 ),
                               ],
                             ),
@@ -242,7 +262,7 @@ class _HeldTicketPageState extends State<HeldTicketPage> {
                         const Divider(height: 1),
                         if (lines.isNotEmpty)
                           _TicketSection(
-                            color: colorScheme.primary,
+                            color: ticketColor,
                             title: AppLocale.products.getString(context),
                             icon: Icons.inventory_2_outlined,
                             children: lines
@@ -257,12 +277,12 @@ class _HeldTicketPageState extends State<HeldTicketPage> {
                                     trailing: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                       decoration: BoxDecoration(
-                                        color: colorScheme.primary.withOpacity(0.12),
+                                        color: ticketColor.withOpacity(0.12),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Text(
                                         '× ${line['quantity'] ?? line['Quantity'] ?? 0}',
-                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.primary),
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: ticketColor),
                                       ),
                                     ),
                                   ),

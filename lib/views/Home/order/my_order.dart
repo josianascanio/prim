@@ -50,66 +50,27 @@ class _OrderListPageState extends State<OrderListPage> {
   String? selectedDocTypeFilter;
   HistorySearchCriteria _appliedCriteria = const HistorySearchCriteria();
   HistorySearchCriteria _pendingCriteria = const HistorySearchCriteria();
-  final TextEditingController _customerSearchController =
-      TextEditingController();
-  final TextEditingController _documentSearchController =
-      TextEditingController();
+  final TextEditingController _customerSearchController = TextEditingController();
+  final TextEditingController _documentSearchController = TextEditingController();
   final TextEditingController _localFilterController = TextEditingController();
   final Map<int, UnifiedHistoryPage> _pageCache = {};
   int _currentPage = 0;
   int _totalRecords = 0;
   String _localFilter = '';
 
-  String get _pinnedFiltersKey =>
-      'order_history_filters_v1|${Base.baseURL}|${Token.client}|${Token.rol}|${UserData.id}';
+  String get _pinnedFiltersKey => 'order_history_filters_v1|${Base.baseURL}|${Token.client}|${Token.rol}|${UserData.id}';
 
   // Mapa de estados de documento (DocStatus) a nombre en español y color
   final Map<String, Map<String, dynamic>> _docStatusMap = {
-    'DR': {
-      'label': AppLocale.statusDraft,
-      'color': Colors.grey,
-      'icon': Icons.edit_note,
-    },
-    'CO': {
-      'label': AppLocale.statusCompleted,
-      'color': Colors.green,
-      'icon': Icons.check_circle_outline,
-    },
-    'CL': {
-      'label': AppLocale.statusClosed,
-      'color': Colors.blueGrey,
-      'icon': Icons.lock_outline,
-    },
-    'VO': {
-      'label': AppLocale.statusVoided,
-      'color': Colors.red,
-      'icon': Icons.cancel_outlined,
-    },
-    'IP': {
-      'label': AppLocale.statusInProgress,
-      'color': Colors.orange,
-      'icon': Icons.hourglass_bottom,
-    },
-    'PR': {
-      'label': AppLocale.statusPrepared,
-      'color': Colors.orange,
-      'icon': Icons.hourglass_bottom,
-    },
-    'WC': {
-      'label': AppLocale.statusWaitingCompletion,
-      'color': Colors.orangeAccent,
-      'icon': Icons.hourglass_top,
-    },
-    'AP': {
-      'label': AppLocale.statusApproved,
-      'color': Colors.blue,
-      'icon': Icons.thumb_up_outlined,
-    },
-    'RJ': {
-      'label': AppLocale.statusRejected,
-      'color': Colors.redAccent,
-      'icon': Icons.thumb_down_outlined,
-    },
+    'DR': {'label': AppLocale.statusDraft, 'color': Colors.grey, 'icon': Icons.edit_note},
+    'CO': {'label': AppLocale.statusCompleted, 'color': Colors.green, 'icon': Icons.check_circle_outline},
+    'CL': {'label': AppLocale.statusClosed, 'color': Colors.blueGrey, 'icon': Icons.lock_outline},
+    'VO': {'label': AppLocale.statusVoided, 'color': Colors.red, 'icon': Icons.cancel_outlined},
+    'IP': {'label': AppLocale.statusInProgress, 'color': Colors.orange, 'icon': Icons.hourglass_bottom},
+    'PR': {'label': AppLocale.statusPrepared, 'color': Colors.orange, 'icon': Icons.hourglass_bottom},
+    'WC': {'label': AppLocale.statusWaitingCompletion, 'color': Colors.orangeAccent, 'icon': Icons.hourglass_top},
+    'AP': {'label': AppLocale.statusApproved, 'color': Colors.blue, 'icon': Icons.thumb_up_outlined},
+    'RJ': {'label': AppLocale.statusRejected, 'color': Colors.redAccent, 'icon': Icons.thumb_down_outlined},
   };
 
   String _localized(String key, [Map<String, Object> values = const {}]) {
@@ -129,11 +90,7 @@ class _OrderListPageState extends State<OrderListPage> {
         backgroundColor: Theme.of(context).cardColor,
         title: Column(
           children: [
-            Icon(
-              Icons.print_rounded,
-              size: 45,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+            Icon(Icons.print_rounded, size: 45, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 10),
             Text(
               AppLocale.confirmPrintTicket.getString(context),
@@ -142,21 +99,11 @@ class _OrderListPageState extends State<OrderListPage> {
             ),
           ],
         ),
-        content: Text(
-          AppLocale.printTicketMessage.getString(context),
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 16),
-        ),
+        content: Text(AppLocale.printTicketMessage.getString(context), textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
         actionsAlignment: MainAxisAlignment.spaceEvenly,
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(AppLocale.no.getString(context)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(AppLocale.yes.getString(context)),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(AppLocale.no.getString(context))),
+          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(AppLocale.yes.getString(context))),
         ],
       ),
     );
@@ -171,11 +118,7 @@ class _OrderListPageState extends State<OrderListPage> {
         backgroundColor: Theme.of(context).cardColor,
         title: Column(
           children: [
-            Icon(
-              Icons.warning_amber_rounded,
-              size: 45,
-              color: Colors.redAccent,
-            ),
+            Icon(Icons.warning_amber_rounded, size: 45, color: Colors.redAccent),
             SizedBox(height: 10),
             Text(
               AppLocale.confirmCreditNoteTitle.getString(context),
@@ -187,11 +130,7 @@ class _OrderListPageState extends State<OrderListPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              AppLocale.confirmCreditNoteBody.getString(context),
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16),
-            ),
+            Text(AppLocale.confirmCreditNoteBody.getString(context), textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
             SizedBox(height: 12),
             Text(
               AppLocale.cannotUndoWarning.getString(context),
@@ -204,17 +143,10 @@ class _OrderListPageState extends State<OrderListPage> {
             ),
           ],
         ),
-        actionsAlignment:
-            MainAxisAlignment.spaceEvenly, // Centra y separa los botones
+        actionsAlignment: MainAxisAlignment.spaceEvenly, // Centra y separa los botones
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(AppLocale.no.getString(context)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(AppLocale.yes.getString(context)),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(AppLocale.no.getString(context))),
+          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(AppLocale.yes.getString(context))),
         ],
       ),
     );
@@ -237,21 +169,11 @@ class _OrderListPageState extends State<OrderListPage> {
             ),
           ],
         ),
-        content: Text(
-          AppLocale.completeOrderBody.getString(context),
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16),
-        ),
+        content: Text(AppLocale.completeOrderBody.getString(context), textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
         actionsAlignment: MainAxisAlignment.spaceEvenly,
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(AppLocale.no.getString(context)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(AppLocale.yes.getString(context)),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(AppLocale.no.getString(context))),
+          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(AppLocale.yes.getString(context))),
         ],
       ),
     );
@@ -262,41 +184,24 @@ class _OrderListPageState extends State<OrderListPage> {
     final bool? confirm = await _printTicketConfirmation(context);
     if (confirm == true) {
       try {
-        final pdfBytes = POS.isPOS == true
-            ? await generatePOSTicket(order)
-            : await generateOrderTicket(order);
+        final pdfBytes = POS.isPOS == true ? await generatePOSTicket(order) : await generateOrderTicket(order);
 
         try {
           final printers = await Printing.listPrinters();
           final defaultPrinter = printers.firstWhere(
             (p) => p.isDefault,
-            orElse: () => printers.isNotEmpty
-                ? printers.first
-                : throw Exception(
-                    AppLocale.noPrintersAvailable.getString(context),
-                  ),
+            orElse: () => printers.isNotEmpty ? printers.first : throw Exception(AppLocale.noPrintersAvailable.getString(context)),
           );
 
-          await Printing.directPrintPdf(
-            printer: defaultPrinter,
-            usePrinterSettings: true,
-            dynamicLayout: true,
-            onLayout: (_) => pdfBytes,
-          );
+          await Printing.directPrintPdf(printer: defaultPrinter, usePrinterSettings: true, dynamicLayout: true, onLayout: (_) => pdfBytes);
         } catch (e) {
-          await Printing.sharePdf(
-            bytes: pdfBytes,
-            filename: 'Order_${order['DocumentNo']}.pdf',
-          );
+          await Printing.sharePdf(bytes: pdfBytes, filename: 'Order_${order['DocumentNo']}.pdf');
         }
       } catch (e) {
         // Último fallback silencioso: intentar compartir PDF genérico
         try {
           final pdfBytes = await generateOrderTicket(order);
-          await Printing.sharePdf(
-            bytes: pdfBytes,
-            filename: 'Order_${order['DocumentNo']}.pdf',
-          );
+          await Printing.sharePdf(bytes: pdfBytes, filename: 'Order_${order['DocumentNo']}.pdf');
         } catch (_) {}
       }
     }
@@ -326,23 +231,11 @@ class _OrderListPageState extends State<OrderListPage> {
         final printers = await Printing.listPrinters();
         final defaultPrinter = printers.firstWhere(
           (printer) => printer.isDefault,
-          orElse: () => printers.isNotEmpty
-              ? printers.first
-              : throw Exception(
-                  AppLocale.noPrintersAvailable.getString(context),
-                ),
+          orElse: () => printers.isNotEmpty ? printers.first : throw Exception(AppLocale.noPrintersAvailable.getString(context)),
         );
-        await Printing.directPrintPdf(
-          printer: defaultPrinter,
-          usePrinterSettings: true,
-          dynamicLayout: true,
-          onLayout: (_) => pdfBytes,
-        );
+        await Printing.directPrintPdf(printer: defaultPrinter, usePrinterSettings: true, dynamicLayout: true, onLayout: (_) => pdfBytes);
       } catch (_) {
-        await Printing.sharePdf(
-          bytes: pdfBytes,
-          filename: 'Factura_Regalo_${order['DocumentNo']}.pdf',
-        );
+        await Printing.sharePdf(bytes: pdfBytes, filename: 'Factura_Regalo_${order['DocumentNo']}.pdf');
       }
     } catch (_) {}
   }
@@ -364,10 +257,7 @@ class _OrderListPageState extends State<OrderListPage> {
   }
 
   Future<void> _onHistoryCacheChanged() async {
-    final cached = await OrderHistoryRepository.instance.readPage(
-      criteria: _appliedCriteria,
-      pageIndex: _currentPage,
-    );
+    final cached = await OrderHistoryRepository.instance.readPage(criteria: _appliedCriteria, pageIndex: _currentPage);
     if (!mounted || cached == null || isSearchLoading) return;
     setState(() {
       _orders = cached.orders;
@@ -377,9 +267,7 @@ class _OrderListPageState extends State<OrderListPage> {
   }
 
   Future<void> _initializeHistory() async {
-    final organizations = List<Map<String, dynamic>>.from(
-      UserData.organizations,
-    );
+    final organizations = List<Map<String, dynamic>>.from(UserData.organizations);
     final prefs = await SharedPreferences.getInstance();
     HistorySearchCriteria criteria = const HistorySearchCriteria();
     var hasPinnedFilters = false;
@@ -388,19 +276,14 @@ class _OrderListPageState extends State<OrderListPage> {
       try {
         final decoded = jsonDecode(rawCriteria);
         if (decoded is Map) {
-          criteria = HistorySearchCriteria.fromJson(
-            Map<String, dynamic>.from(decoded),
-          );
+          criteria = HistorySearchCriteria.fromJson(Map<String, dynamic>.from(decoded));
           hasPinnedFilters = true;
         }
       } catch (_) {
         await prefs.remove(_pinnedFiltersKey);
       }
     }
-    if (criteria.organizationId != null &&
-        !organizations.any(
-          (organization) => organization['id'] == criteria.organizationId,
-        )) {
+    if (criteria.organizationId != null && !organizations.any((organization) => organization['id'] == criteria.organizationId)) {
       criteria = criteria.copyWith(clearOrganization: true);
       if (hasPinnedFilters) {
         await prefs.setString(_pinnedFiltersKey, jsonEncode(criteria.toJson()));
@@ -420,10 +303,7 @@ class _OrderListPageState extends State<OrderListPage> {
   Future<void> _pinAndApplyFilters() async {
     _updatePendingTextCriteria();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _pinnedFiltersKey,
-      jsonEncode(_pendingCriteria.toJson()),
-    );
+    await prefs.setString(_pinnedFiltersKey, jsonEncode(_pendingCriteria.toJson()));
     if (!mounted) return;
     setState(() => _hasPinnedFilters = true);
     Navigator.of(context).pop();
@@ -440,11 +320,7 @@ class _OrderListPageState extends State<OrderListPage> {
     await _loadHistory(page: 0, resetCache: true);
   }
 
-  Future<void> _loadHistory({
-    bool initialLoad = false,
-    int page = 0,
-    bool resetCache = false,
-  }) async {
+  Future<void> _loadHistory({bool initialLoad = false, int page = 0, bool resetCache = false}) async {
     if (!mounted) return;
     var hasCachedPage = false;
     if (resetCache) _pageCache.clear();
@@ -459,21 +335,12 @@ class _OrderListPageState extends State<OrderListPage> {
       });
       hasCachedPage = true;
     } else {
-      final cached = await OrderHistoryRepository.instance.readPage(
-        criteria: _pendingCriteria,
-        pageIndex: page,
-      );
+      final cached = await OrderHistoryRepository.instance.readPage(criteria: _pendingCriteria, pageIndex: page);
       if (!mounted) return;
       if (cached != null) {
         final items = <Object>[...cached.orders, ...cached.receipts]
-          ..sort(
-            (left, right) => _historyDate(right).compareTo(_historyDate(left)),
-          );
-        final memoryPage = UnifiedHistoryPage(
-          items: items,
-          totalCount: cached.totalCount,
-          pageIndex: page,
-        );
+          ..sort((left, right) => _historyDate(right).compareTo(_historyDate(left)));
+        final memoryPage = UnifiedHistoryPage(items: items, totalCount: cached.totalCount, pageIndex: page);
         setState(() {
           _pageCache[page] = memoryPage;
           _currentPage = page;
@@ -493,18 +360,8 @@ class _OrderListPageState extends State<OrderListPage> {
     });
     try {
       final results = await Future.wait<dynamic>([
-        fetchOrdersPage(
-          context: context,
-          criteria: _pendingCriteria,
-          top: _sourcePageSize,
-          skip: page * _sourcePageSize,
-        ),
-        fetchInvoicePaymentReceiptsPage(
-          context: context,
-          criteria: _pendingCriteria,
-          top: _sourcePageSize,
-          skip: page * _sourcePageSize,
-        ),
+        fetchOrdersPage(context: context, criteria: _pendingCriteria, top: _sourcePageSize, skip: page * _sourcePageSize),
+        fetchInvoicePaymentReceiptsPage(context: context, criteria: _pendingCriteria, top: _sourcePageSize, skip: page * _sourcePageSize),
       ]);
       if (!mounted) return;
       final orderPage = results[0] as PagedResult<Map<String, dynamic>>;
@@ -521,19 +378,12 @@ class _OrderListPageState extends State<OrderListPage> {
       }
       for (final order in orderPage.records) {
         final orderId = int.tryParse(order['id']?.toString() ?? '');
-        order['hasActiveReturn'] =
-            orderId != null && returnedOrderIds.contains(orderId);
+        order['hasActiveReturn'] = orderId != null && returnedOrderIds.contains(orderId);
       }
       if (!mounted) return;
       final items = <Object>[...orderPage.records, ...receiptPage.records]
-        ..sort(
-          (left, right) => _historyDate(right).compareTo(_historyDate(left)),
-        );
-      final unified = UnifiedHistoryPage(
-        items: items,
-        totalCount: orderPage.rowCount + receiptPage.rowCount,
-        pageIndex: page,
-      );
+        ..sort((left, right) => _historyDate(right).compareTo(_historyDate(left)));
+      final unified = UnifiedHistoryPage(items: items, totalCount: orderPage.rowCount + receiptPage.rowCount, pageIndex: page);
       await OrderHistoryRepository.instance.writePage(
         criteria: _pendingCriteria,
         pageIndex: page,
@@ -560,11 +410,7 @@ class _OrderListPageState extends State<OrderListPage> {
         isSearchLoading = false;
       });
       if (!hasCachedPage) {
-        ToastMessage.show(
-          context: context,
-          message: _localized(AppLocale.historyUpdateError, {'error': error}),
-          type: ToastType.failure,
-        );
+        ToastMessage.show(context: context, message: _localized(AppLocale.historyUpdateError, {'error': error}), type: ToastType.failure);
       }
     }
   }
@@ -579,45 +425,33 @@ class _OrderListPageState extends State<OrderListPage> {
       final query = _localFilter.trim().toLowerCase();
       final matchesLocal =
           query.isEmpty ||
-          (order['DocumentNo'] ?? '').toString().toLowerCase().contains(
-            query,
-          ) ||
-          (order['bpartner']?['name'] ?? '').toString().toLowerCase().contains(
-            query,
-          );
-      final matchesDocType =
-          selectedDocTypeFilter == null ||
-          order['doctypetarget']?['name'] == selectedDocTypeFilter;
+          (order['DocumentNo'] ?? '').toString().toLowerCase().contains(query) ||
+          (order['bpartner']?['name'] ?? '').toString().toLowerCase().contains(query);
+      final matchesDocType = selectedDocTypeFilter == null || order['doctypetarget']?['name'] == selectedDocTypeFilter;
       return matchesLocal && matchesDocType;
     }).toList();
   }
 
   List<InvoicePaymentReceipt> _getFilteredReceipts() {
-    if (selectedDocTypeFilter != null &&
-        selectedDocTypeFilter != _paymentFilterValue) {
+    if (selectedDocTypeFilter != null && selectedDocTypeFilter != _paymentFilterValue) {
       return const [];
     }
     final query = _localFilter.trim().toLowerCase();
     return _invoicePaymentReceipts.where((receipt) {
-      return query.isEmpty ||
-          receipt.customerName.toLowerCase().contains(query) ||
-          receipt.displayDocumentNo.toLowerCase().contains(query);
+      return query.isEmpty || receipt.customerName.toLowerCase().contains(query) || receipt.displayDocumentNo.toLowerCase().contains(query);
     }).toList();
   }
 
   List<Object> _getUnifiedHistory() {
     final items = <Object>[..._getFilteredOrders(), ..._getFilteredReceipts()];
-    items.sort(
-      (left, right) => _historyDate(right).compareTo(_historyDate(left)),
-    );
+    items.sort((left, right) => _historyDate(right).compareTo(_historyDate(left)));
     return items;
   }
 
   DateTime _historyDate(Object item) {
     if (item is InvoicePaymentReceipt) return item.date;
     if (item is Map) {
-      return DateTime.tryParse((item['Created'] ?? '').toString()) ??
-          DateTime.fromMillisecondsSinceEpoch(0);
+      return DateTime.tryParse((item['Created'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
     }
     return DateTime.fromMillisecondsSinceEpoch(0);
   }
@@ -673,18 +507,12 @@ class _OrderListPageState extends State<OrderListPage> {
             children: [
               Row(
                 children: [
-                  Icon(
-                    Icons.manage_search_rounded,
-                    color: Theme.of(context).primaryColor,
-                  ),
+                  Icon(Icons.manage_search_rounded, color: Theme.of(context).primaryColor),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       AppLocale.advancedSearch.getString(context),
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                   ),
                   IconButton(
@@ -704,15 +532,10 @@ class _OrderListPageState extends State<OrderListPage> {
                     children: [
                       TextfieldTheme(
                         controlador: _customerSearchController,
-                        texto: AppLocale.customerOrIdentification.getString(
-                          context,
-                        ),
+                        texto: AppLocale.customerOrIdentification.getString(context),
                         icono: Icons.person_search_outlined,
                         maxLines: 1,
-                        fillColor:
-                            Theme.of(context).brightness == Brightness.light
-                            ? Colors.white
-                            : Theme.of(context).cardColor,
+                        fillColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Theme.of(context).cardColor,
                         onChanged: (_) => _updatePendingTextCriteria(),
                         onSubmitted: (_) {
                           if (!isSearchLoading) _applyDrawerSearch();
@@ -721,15 +544,10 @@ class _OrderListPageState extends State<OrderListPage> {
                       const SizedBox(height: 14),
                       TextfieldTheme(
                         controlador: _documentSearchController,
-                        texto: AppLocale.orderReceiptInvoiceNumber.getString(
-                          context,
-                        ),
+                        texto: AppLocale.orderReceiptInvoiceNumber.getString(context),
                         icono: Icons.receipt_long_outlined,
                         maxLines: 1,
-                        fillColor:
-                            Theme.of(context).brightness == Brightness.light
-                            ? Colors.white
-                            : Theme.of(context).cardColor,
+                        fillColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Theme.of(context).cardColor,
                         onChanged: (_) => _updatePendingTextCriteria(),
                         onSubmitted: (_) {
                           if (!isSearchLoading) _applyDrawerSearch();
@@ -739,42 +557,23 @@ class _OrderListPageState extends State<OrderListPage> {
                       DropdownButtonFormField<String?>(
                         value: criteria.docStatus,
                         decoration: InputDecoration(
-                          labelText: AppLocale.documentStatus.getString(
-                            context,
-                          ),
+                          labelText: AppLocale.documentStatus.getString(context),
                           prefixIcon: const Icon(Icons.fact_check_outlined),
                           filled: true,
-                          fillColor:
-                              Theme.of(context).brightness == Brightness.light
-                              ? Colors.white
-                              : Theme.of(context).cardColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                          fillColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Theme.of(context).cardColor,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         items: [
-                          DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text(
-                              AppLocale.allStatuses.getString(context),
-                            ),
-                          ),
+                          DropdownMenuItem<String?>(value: null, child: Text(AppLocale.allStatuses.getString(context))),
                           ..._docStatusMap.entries.map(
                             (entry) => DropdownMenuItem<String?>(
                               value: entry.key,
-                              child: Text(
-                                (entry.value['label'] as String).getString(
-                                  context,
-                                ),
-                              ),
+                              child: Text((entry.value['label'] as String).getString(context)),
                             ),
                           ),
                         ],
-                        onChanged: (value) => _stageCriteria(
-                          value == null
-                              ? criteria.copyWith(clearDocStatus: true)
-                              : criteria.copyWith(docStatus: value),
-                        ),
+                        onChanged: (value) =>
+                            _stageCriteria(value == null ? criteria.copyWith(clearDocStatus: true) : criteria.copyWith(docStatus: value)),
                       ),
                       const SizedBox(height: 14),
                       DropdownButtonFormField<int?>(
@@ -783,67 +582,41 @@ class _OrderListPageState extends State<OrderListPage> {
                           labelText: AppLocale.organization.getString(context),
                           prefixIcon: const Icon(Icons.business_outlined),
                           filled: true,
-                          fillColor:
-                              Theme.of(context).brightness == Brightness.light
-                              ? Colors.white
-                              : Theme.of(context).cardColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                          fillColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Theme.of(context).cardColor,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         items: [
-                          DropdownMenuItem<int?>(
-                            value: null,
-                            child: Text(
-                              AppLocale.allOrganizations.getString(context),
-                            ),
-                          ),
+                          DropdownMenuItem<int?>(value: null, child: Text(AppLocale.allOrganizations.getString(context))),
                           ..._organizations.map(
                             (organization) => DropdownMenuItem<int?>(
                               value: organization['id'] as int?,
-                              child: Text(
-                                (organization['name'] ?? '').toString(),
-                              ),
+                              child: Text((organization['name'] ?? '').toString()),
                             ),
                           ),
                         ],
                         onChanged: (value) => _stageCriteria(
-                          value == null
-                              ? criteria.copyWith(clearOrganization: true)
-                              : criteria.copyWith(organizationId: value),
+                          value == null ? criteria.copyWith(clearOrganization: true) : criteria.copyWith(organizationId: value),
                         ),
                       ),
                       const SizedBox(height: 8),
                       SwitchListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          AppLocale.onlyMyMovements.getString(context),
-                        ),
-                        subtitle: Text(
-                          AppLocale.onlyMyMovementsSubtitle.getString(context),
-                        ),
+                        title: Text(AppLocale.onlyMyMovements.getString(context)),
+                        subtitle: Text(AppLocale.onlyMyMovementsSubtitle.getString(context)),
                         value: criteria.onlyMyMovements,
-                        onChanged: (value) => _stageCriteria(
-                          criteria.copyWith(onlyMyMovements: value),
-                        ),
+                        onChanged: (value) => _stageCriteria(criteria.copyWith(onlyMyMovements: value)),
                       ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
                           Text(
                             AppLocale.pinnedFilters.getString(context),
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                            style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(width: 4),
                           Tooltip(
-                            message: AppLocale.pinnedFiltersInfo.getString(
-                              context,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).primaryColor,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
+                            message: AppLocale.pinnedFiltersInfo.getString(context),
+                            decoration: BoxDecoration(color: Theme.of(context).primaryColor, borderRadius: BorderRadius.circular(6)),
                             child: const Icon(Icons.info_outline, size: 18),
                           ),
                         ],
@@ -854,25 +627,12 @@ class _OrderListPageState extends State<OrderListPage> {
                         runSpacing: 8,
                         children: [
                           OutlinedButton.icon(
-                            onPressed: isSearchLoading
-                                ? null
-                                : _pinAndApplyFilters,
-                            icon: Icon(
-                              _hasPinnedFilters
-                                  ? Icons.push_pin
-                                  : Icons.push_pin_outlined,
-                            ),
-                            label: Text(
-                              (_hasPinnedFilters
-                                      ? AppLocale.updatePinnedFilters
-                                      : AppLocale.pinAndApply)
-                                  .getString(context),
-                            ),
+                            onPressed: isSearchLoading ? null : _pinAndApplyFilters,
+                            icon: Icon(_hasPinnedFilters ? Icons.push_pin : Icons.push_pin_outlined),
+                            label: Text((_hasPinnedFilters ? AppLocale.updatePinnedFilters : AppLocale.pinAndApply).getString(context)),
                           ),
                           OutlinedButton.icon(
-                            onPressed: isSearchLoading || !_hasPinnedFilters
-                                ? null
-                                : _resetPinnedFilters,
+                            onPressed: isSearchLoading || !_hasPinnedFilters ? null : _resetPinnedFilters,
                             icon: const Icon(Icons.restart_alt),
                             label: Text(AppLocale.reset.getString(context)),
                           ),
@@ -931,9 +691,7 @@ class _OrderListPageState extends State<OrderListPage> {
         children: [
           Text(
             AppLocale.filterThisPage.getString(context),
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
           TextfieldTheme(
@@ -941,9 +699,7 @@ class _OrderListPageState extends State<OrderListPage> {
             texto: AppLocale.customerOrderReceipt.getString(context),
             icono: Icons.filter_alt_outlined,
             maxLines: 1,
-            fillColor: Theme.of(context).brightness == Brightness.light
-                ? Colors.white
-                : Theme.of(context).cardColor,
+            fillColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Theme.of(context).cardColor,
             onChanged: (value) {
               setState(() => _localFilter = value.trim().toLowerCase());
             },
@@ -951,9 +707,7 @@ class _OrderListPageState extends State<OrderListPage> {
           const SizedBox(height: 12),
           Text(
             AppLocale.documentTypeFilter.getString(context),
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
           if (_orders.isNotEmpty || _invoicePaymentReceipts.isNotEmpty)
@@ -979,27 +733,18 @@ class _OrderListPageState extends State<OrderListPage> {
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
                         avatar: const Icon(Icons.payments_outlined, size: 17),
-                        label: Text(
-                          AppLocale.invoicePayments.getString(context),
-                        ),
+                        label: Text(AppLocale.invoicePayments.getString(context)),
                         selected: selectedDocTypeFilter == _paymentFilterValue,
-                        selectedColor: Theme.of(
-                          context,
-                        ).colorScheme.secondaryContainer,
+                        selectedColor: Theme.of(context).colorScheme.secondaryContainer,
                         onSelected: (selected) {
                           setState(() {
-                            selectedDocTypeFilter = selected
-                                ? _paymentFilterValue
-                                : null;
+                            selectedDocTypeFilter = selected ? _paymentFilterValue : null;
                           });
                         },
                       ),
                     ),
                   ..._orders
-                      .map(
-                        (order) =>
-                            order['doctypetarget']?['name']?.toString() ?? '',
-                      )
+                      .map((order) => order['doctypetarget']?['name']?.toString() ?? '')
                       .where((name) => name.isNotEmpty)
                       .toSet()
                       .map(
@@ -1009,14 +754,10 @@ class _OrderListPageState extends State<OrderListPage> {
                             label: Text(docName),
                             selected: selectedDocTypeFilter == docName,
                             selectedColor: Theme.of(context).primaryColor,
-                            checkmarkColor: Theme.of(
-                              context,
-                            ).colorScheme.onPrimary,
+                            checkmarkColor: Theme.of(context).colorScheme.onPrimary,
                             onSelected: (selected) {
                               setState(() {
-                                selectedDocTypeFilter = selected
-                                    ? docName
-                                    : null;
+                                selectedDocTypeFilter = selected ? docName : null;
                               });
                             },
                           ),
@@ -1033,29 +774,16 @@ class _OrderListPageState extends State<OrderListPage> {
   Widget _buildPagination() {
     final visibleCount = _getUnifiedHistory().length;
     final loadedCount = _orders.length + _invoicePaymentReceipts.length;
-    final totalPages = _totalRecords == 0
-        ? 1
-        : (_totalRecords / (_sourcePageSize * 2)).ceil();
-    final hasLocalFilter =
-        _localFilter.isNotEmpty || selectedDocTypeFilter != null;
-    final start = _totalRecords == 0
-        ? 0
-        : (_currentPage * _sourcePageSize * 2) + 1;
+    final totalPages = _totalRecords == 0 ? 1 : (_totalRecords / (_sourcePageSize * 2)).ceil();
+    final hasLocalFilter = _localFilter.isNotEmpty || selectedDocTypeFilter != null;
+    final start = _totalRecords == 0 ? 0 : (_currentPage * _sourcePageSize * 2) + 1;
     final end = (start + loadedCount - 1).clamp(0, _totalRecords);
     return Column(
       children: [
         Text(
           hasLocalFilter
-              ? _localized(AppLocale.showingFilteredHistory, {
-                  'visible': visibleCount,
-                  'loaded': loadedCount,
-                  'total': _totalRecords,
-                })
-              : _localized(AppLocale.showingHistory, {
-                  'start': start,
-                  'end': end,
-                  'total': _totalRecords,
-                }),
+              ? _localized(AppLocale.showingFilteredHistory, {'visible': visibleCount, 'loaded': loadedCount, 'total': _totalRecords})
+              : _localized(AppLocale.showingHistory, {'start': start, 'end': end, 'total': _totalRecords}),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall,
         ),
@@ -1064,25 +792,16 @@ class _OrderListPageState extends State<OrderListPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             OutlinedButton.icon(
-              onPressed: _currentPage > 0 && !isSearchLoading
-                  ? () => _loadHistory(page: _currentPage - 1)
-                  : null,
+              onPressed: _currentPage > 0 && !isSearchLoading ? () => _loadHistory(page: _currentPage - 1) : null,
               icon: const Icon(Icons.chevron_left),
               label: Text(AppLocale.previous.getString(context)),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                _localized(AppLocale.pageOf, {
-                  'page': _currentPage + 1,
-                  'total': totalPages,
-                }),
-              ),
+              child: Text(_localized(AppLocale.pageOf, {'page': _currentPage + 1, 'total': totalPages})),
             ),
             OutlinedButton.icon(
-              onPressed: _currentPage + 1 < totalPages && !isSearchLoading
-                  ? () => _loadHistory(page: _currentPage + 1)
-                  : null,
+              onPressed: _currentPage + 1 < totalPages && !isSearchLoading ? () => _loadHistory(page: _currentPage + 1) : null,
               iconAlignment: IconAlignment.end,
               icon: const Icon(Icons.chevron_right),
               label: Text(AppLocale.next.getString(context)),
@@ -1093,36 +812,20 @@ class _OrderListPageState extends State<OrderListPage> {
     );
   }
 
-  Future<void> _printInvoicePaymentReceipt(
-    InvoicePaymentReceipt receipt,
-  ) async {
+  Future<void> _printInvoicePaymentReceipt(InvoicePaymentReceipt receipt) async {
     final confirm = await _printTicketConfirmation(context);
     if (confirm != true) return;
     try {
-      final pdfBytes = POS.isPOS
-          ? await generateInvoicePaymentPOSTicket(receipt)
-          : await generateInvoicePaymentReceipt(receipt);
+      final pdfBytes = POS.isPOS ? await generateInvoicePaymentPOSTicket(receipt) : await generateInvoicePaymentReceipt(receipt);
       try {
         final printers = await Printing.listPrinters();
         final defaultPrinter = printers.firstWhere(
           (printer) => printer.isDefault,
-          orElse: () => printers.isNotEmpty
-              ? printers.first
-              : throw Exception(
-                  AppLocale.noPrintersAvailable.getString(context),
-                ),
+          orElse: () => printers.isNotEmpty ? printers.first : throw Exception(AppLocale.noPrintersAvailable.getString(context)),
         );
-        await Printing.directPrintPdf(
-          printer: defaultPrinter,
-          usePrinterSettings: true,
-          dynamicLayout: true,
-          onLayout: (_) => pdfBytes,
-        );
+        await Printing.directPrintPdf(printer: defaultPrinter, usePrinterSettings: true, dynamicLayout: true, onLayout: (_) => pdfBytes);
       } catch (_) {
-        await Printing.sharePdf(
-          bytes: pdfBytes,
-          filename: 'Recibo_Pago_${receipt.displayDocumentNo}.pdf',
-        );
+        await Printing.sharePdf(bytes: pdfBytes, filename: 'Recibo_Pago_${receipt.displayDocumentNo}.pdf');
       }
     } catch (_) {}
   }
@@ -1130,14 +833,9 @@ class _OrderListPageState extends State<OrderListPage> {
   Widget _buildInvoicePaymentCard(InvoicePaymentReceipt receipt) {
     final green = Colors.green.shade700;
     final contentColor =
-        Theme.of(context).textTheme.bodyLarge?.color ??
-        (Theme.of(context).brightness == Brightness.dark
-            ? Colors.white
-            : Colors.black87);
+        Theme.of(context).textTheme.bodyLarge?.color ?? (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87);
     final cardColor = Color.alphaBlend(
-      Colors.green.withOpacity(
-        Theme.of(context).brightness == Brightness.dark ? 0.12 : 0.07,
-      ),
+      Colors.green.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.12 : 0.07),
       Theme.of(context).cardColor,
     );
     Widget chip(String label, IconData icon, Color color) => Container(
@@ -1154,11 +852,7 @@ class _OrderListPageState extends State<OrderListPage> {
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -1166,12 +860,7 @@ class _OrderListPageState extends State<OrderListPage> {
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => InvoicePaymentDetailsPage(receipt: receipt),
-        ),
-      ),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InvoicePaymentDetailsPage(receipt: receipt))),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
@@ -1179,13 +868,7 @@ class _OrderListPageState extends State<OrderListPage> {
           color: cardColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: green.withOpacity(0.18)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1196,10 +879,7 @@ class _OrderListPageState extends State<OrderListPage> {
                 Container(
                   height: 40,
                   width: 40,
-                  decoration: BoxDecoration(
-                    color: green.withOpacity(0.12),
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: BoxDecoration(color: green.withOpacity(0.12), shape: BoxShape.circle),
                   child: Icon(Icons.person, color: green, size: 20),
                 ),
                 const SizedBox(width: 12),
@@ -1211,17 +891,12 @@ class _OrderListPageState extends State<OrderListPage> {
                         receipt.customerName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        _localized(AppLocale.receiptNumber, {
-                          'number': receipt.displayDocumentNo,
-                        }),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey.shade600,
-                        ),
+                        _localized(AppLocale.receiptNumber, {'number': receipt.displayDocumentNo}),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
                       ),
                     ],
                   ),
@@ -1247,80 +922,46 @@ class _OrderListPageState extends State<OrderListPage> {
                 children: [
                   Row(
                     children: [
-                      Icon(
-                        Icons.payments_outlined,
-                        color: contentColor,
-                        size: 18,
-                      ),
+                      Icon(Icons.payments_outlined, color: contentColor, size: 18),
                       const SizedBox(width: 8),
                       Text(
                         AppLocale.summary.getString(context),
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: contentColor,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(color: contentColor, fontWeight: FontWeight.w700),
                       ),
                       const Spacer(),
-                      Icon(
-                        Icons.calendar_today_outlined,
-                        color: contentColor,
-                        size: 16,
-                      ),
+                      Icon(Icons.calendar_today_outlined, color: contentColor, size: 16),
                       const SizedBox(width: 6),
                       Text(
                         formatDateUI(receipt.date.toIso8601String()),
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium?.copyWith(color: contentColor),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: contentColor),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Icon(
-                        Icons.account_balance_wallet_outlined,
-                        color: contentColor,
-                        size: 16,
-                      ),
+                      Icon(Icons.account_balance_wallet_outlined, color: contentColor, size: 16),
                       const SizedBox(width: 6),
                       Text(
                         '${AppLocale.amountLabel.getString(context)} ',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: contentColor,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: contentColor, fontWeight: FontWeight.w500),
                       ),
                       Text(
                         'B/.${receipt.totalApplied.toStringAsFixed(2)}',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: contentColor,
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: contentColor, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(height: 1, thickness: 0.5),
-            ),
+            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, thickness: 0.5)),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                chip(
-                  AppLocale.invoicePayments.getString(context),
-                  Icons.receipt_long_outlined,
-                  green,
-                ),
-                chip(
-                  AppLocale.statusCompleted.getString(context),
-                  Icons.check_circle_outline,
-                  Colors.green,
-                ),
+                chip(AppLocale.invoicePayments.getString(context), Icons.receipt_long_outlined, green),
+                chip(AppLocale.statusCompleted.getString(context), Icons.check_circle_outline, Colors.green),
               ],
             ),
           ],
@@ -1346,20 +987,14 @@ class _OrderListPageState extends State<OrderListPage> {
         break;
       case 'convert':
         if (POS.docTypesComplete.isEmpty) {
-          ToastMessage.show(
-            context: context,
-            message: AppLocale.noDocTypesAvailable.getString(context),
-            type: ToastType.help,
-          );
+          ToastMessage.show(context: context, message: AppLocale.noDocTypesAvailable.getString(context), type: ToastType.help);
           return;
         }
 
         showModalBottomSheet(
           context: context,
           backgroundColor: Theme.of(context).cardColor,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
           builder: (BuildContext context) {
             return SafeArea(
               child: Padding(
@@ -1369,69 +1004,38 @@ class _OrderListPageState extends State<OrderListPage> {
                   children: [
                     Text(
                       AppLocale.documentType.getString(context),
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     const Divider(),
                     ...POS.docTypesComplete.map((doc) {
                       final dynamic rawId = doc['id'];
-                      final int? docTypeId = rawId is int
-                          ? rawId
-                          : int.tryParse(rawId?.toString() ?? '');
-                      final String docName =
-                          (doc['name'] ??
-                                  doc['Name'] ??
-                                  AppLocale.genericDocument.getString(context))
-                              .toString();
+                      final int? docTypeId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+                      final String docName = (doc['name'] ?? doc['Name'] ?? AppLocale.genericDocument.getString(context)).toString();
 
-                      if (doc['DocSubTypeSO'] == 'RM' ||
-                          docTypeId == POS.docTypeRefundID ||
-                          docTypeId == order['doctypetarget']?['id']) {
+                      if (doc['DocSubTypeSO'] == 'RM' || docTypeId == POS.docTypeRefundID || docTypeId == order['doctypetarget']?['id']) {
                         return const SizedBox.shrink();
                       }
 
                       return ListTile(
                         leading: Container(
                           padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).primaryColor.withOpacity(0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.transform_outlined,
-                            color: Theme.of(context).primaryColor,
-                          ),
+                          decoration: BoxDecoration(color: Theme.of(context).primaryColor.withOpacity(0.1), shape: BoxShape.circle),
+                          child: Icon(Icons.transform_outlined, color: Theme.of(context).primaryColor),
                         ),
-                        title: Text(
-                          docName,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                        trailing: const Icon(
-                          Icons.chevron_right_rounded,
-                          color: Colors.grey,
-                        ),
+                        title: Text(docName, style: Theme.of(context).textTheme.bodyLarge),
+                        trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
                         onTap: () {
                           Navigator.pop(context);
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => OrderNewPage(
-                                isRefund: false,
-                                doctypeID: docTypeId,
-                                orderName: docName,
-                                sourceOrderId: order['id'],
-                              ),
+                              builder: (_) =>
+                                  OrderNewPage(isRefund: false, doctypeID: docTypeId, orderName: docName, sourceOrderId: order['id']),
                             ),
                           ).then((value) {
                             if (value == true) {
-                              _loadHistory(
-                                page: _currentPage,
-                                resetCache: true,
-                              );
+                              _loadHistory(page: _currentPage, resetCache: true);
                             }
                           });
                         },
@@ -1445,51 +1049,34 @@ class _OrderListPageState extends State<OrderListPage> {
         );
         break;
       case 'refund':
-        final orderId = int.tryParse(
-          (order['id'] ?? order['C_Order_ID'] ?? order['record_id'])
-                  ?.toString() ??
-              '',
-        );
+        final orderId = int.tryParse((order['id'] ?? order['C_Order_ID'] ?? order['record_id'])?.toString() ?? '');
         if (orderId == null) return;
         try {
-          if (await hasActiveReturnForOrder(
-            orderId: orderId,
-            invoices: order['C_Invoice'] as List? ?? const [],
-          )) {
+          if (await hasActiveReturnForOrder(orderId: orderId, invoices: order['C_Invoice'] as List? ?? const [])) {
             if (!mounted) return;
-            ToastMessage.show(
-              context: context,
-              message: AppLocale.returnAlreadyExists.getString(context),
-              type: ToastType.warning,
-            );
+            ToastMessage.show(context: context, message: AppLocale.returnAlreadyExists.getString(context), type: ToastType.warning);
             await _loadHistory(page: _currentPage, resetCache: true);
             return;
           }
         } catch (_) {
           if (!mounted) return;
-          ToastMessage.show(
-            context: context,
-            message: AppLocale.returnValidationError.getString(context),
-            type: ToastType.failure,
-          );
+          ToastMessage.show(context: context, message: AppLocale.returnValidationError.getString(context), type: ToastType.failure);
           return;
         }
         final bool? confirm = await _refundConfirmation(context);
 
         if (confirm == true) {
           if (!mounted) return;
-          await Navigator.push(
+          final completed = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
-              builder: (_) => OrderNewPage(
-                isRefund: true,
-                doctypeID: POS.docTypeRefundID,
-                orderName: POS.docTypeRefundName,
-                sourceOrderId: orderId,
-              ),
+              builder: (_) =>
+                  OrderNewPage(isRefund: true, doctypeID: POS.docTypeRefundID, orderName: POS.docTypeRefundName, sourceOrderId: orderId),
             ),
           );
-          if (mounted) await _loadHistory(page: _currentPage, resetCache: true);
+          if (mounted && completed == true) {
+            await _loadHistory(page: _currentPage, resetCache: true);
+          }
         }
         break;
       case 'convertQuote':
@@ -1500,8 +1087,7 @@ class _OrderListPageState extends State<OrderListPage> {
               isRefund: false,
               doctypeID: POS.docTypeID,
               orderName: POS.docTypeName,
-              sourceOrderId:
-                  order['id'] ?? order['C_Order_ID'] ?? order['record_id'],
+              sourceOrderId: order['id'] ?? order['C_Order_ID'] ?? order['record_id'],
             ),
           ),
         );
@@ -1518,56 +1104,32 @@ class _OrderListPageState extends State<OrderListPage> {
         final arcOrderId = int.tryParse(order['id']?.toString() ?? '');
         if (arcOrderId == null) return;
         try {
-          if (await hasActiveReturnForOrder(
-            orderId: arcOrderId,
-            invoices: order['C_Invoice'] as List? ?? const [],
-          )) {
+          if (await hasActiveReturnForOrder(orderId: arcOrderId, invoices: order['C_Invoice'] as List? ?? const [])) {
             if (!mounted) return;
-            ToastMessage.show(
-              context: context,
-              message: AppLocale.returnAlreadyExists.getString(context),
-              type: ToastType.warning,
-            );
+            ToastMessage.show(context: context, message: AppLocale.returnAlreadyExists.getString(context), type: ToastType.warning);
             await _loadHistory(page: _currentPage, resetCache: true);
             return;
           }
         } catch (_) {
           if (!mounted) return;
-          ToastMessage.show(
-            context: context,
-            message: AppLocale.returnValidationError.getString(context),
-            type: ToastType.failure,
-          );
+          ToastMessage.show(context: context, message: AppLocale.returnValidationError.getString(context), type: ToastType.failure);
           return;
         }
         final bool? confirmArc = await _refundConfirmation(context);
         if (confirmArc == true) {
           try {
-            if (await hasActiveReturnForOrder(
-              orderId: arcOrderId,
-              invoices: order['C_Invoice'] as List? ?? const [],
-            )) {
+            if (await hasActiveReturnForOrder(orderId: arcOrderId, invoices: order['C_Invoice'] as List? ?? const [])) {
               if (!mounted) return;
-              ToastMessage.show(
-                context: context,
-                message: AppLocale.returnAlreadyExists.getString(context),
-                type: ToastType.warning,
-              );
+              ToastMessage.show(context: context, message: AppLocale.returnAlreadyExists.getString(context), type: ToastType.warning);
               await _loadHistory(page: _currentPage, resetCache: true);
               return;
             }
           } catch (_) {
             if (!mounted) return;
-            ToastMessage.show(
-              context: context,
-              message: AppLocale.returnValidationError.getString(context),
-              type: ToastType.failure,
-            );
+            ToastMessage.show(context: context, message: AppLocale.returnValidationError.getString(context), type: ToastType.failure);
             return;
           }
-          final bool creditMemoSucces = await createCreditMemo(
-            cInvoiceID: order['C_Invoice']?[0]?['id'],
-          );
+          final bool creditMemoSucces = await createCreditMemo(cInvoiceID: order['C_Invoice']?[0]?['id']);
           if (creditMemoSucces) {
             _loadHistory(page: _currentPage, resetCache: true);
           }
@@ -1577,25 +1139,15 @@ class _OrderListPageState extends State<OrderListPage> {
         final bool? confirmDocComplete = await _completeConfirmation(context);
         if (confirmDocComplete == true) {
           final docCompleteSucces = await docComplete(cOrderID: order['id']);
-          if (docCompleteSucces["success"] == true &&
-              docCompleteSucces["isError"] == false) {
+          if (docCompleteSucces["success"] == true && docCompleteSucces["isError"] == false) {
             _loadHistory(page: _currentPage, resetCache: true);
-          } else if (docCompleteSucces["success"] == true &&
-              docCompleteSucces["isError"] == true) {
+          } else if (docCompleteSucces["success"] == true && docCompleteSucces["isError"] == true) {
             if (mounted) {
-              ToastMessage.show(
-                context: context,
-                message: docCompleteSucces["summary"],
-                type: ToastType.failure,
-              );
+              ToastMessage.show(context: context, message: docCompleteSucces["summary"], type: ToastType.failure);
             }
           } else {
             if (mounted) {
-              ToastMessage.show(
-                context: context,
-                message: AppLocale.noDocComplete.getString(context),
-                type: ToastType.failure,
-              );
+              ToastMessage.show(context: context, message: AppLocale.noDocComplete.getString(context), type: ToastType.failure);
             }
           }
         }
@@ -1615,8 +1167,7 @@ class _OrderListPageState extends State<OrderListPage> {
   bool _isReturnOrder(Map<String, dynamic> order) {
     final subtype = order['doctypetarget']?['subtype'];
     final subtypeCode = subtype is Map ? subtype['id'] : subtype;
-    return subtypeCode == 'RM' ||
-        order['doctypetarget']?['id'] == POS.docTypeRefundID;
+    return subtypeCode == 'RM' || order['doctypetarget']?['id'] == POS.docTypeRefundID;
   }
 
   Widget _buildCreditMemoPill() {
@@ -1639,11 +1190,7 @@ class _OrderListPageState extends State<OrderListPage> {
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 12,
-              color: baseColor,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 12, color: baseColor, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -1657,12 +1204,7 @@ class _OrderListPageState extends State<OrderListPage> {
     }
 
     final meta =
-        _docStatusMap[statusCode] ??
-        {
-          'label': statusCode,
-          'color': Theme.of(context).colorScheme.primary,
-          'icon': Icons.flag_outlined,
-        };
+        _docStatusMap[statusCode] ?? {'label': statusCode, 'color': Theme.of(context).colorScheme.primary, 'icon': Icons.flag_outlined};
 
     final Color baseColor = meta['color'] as Color;
     final Color bgColor = baseColor.withOpacity(0.12);
@@ -1683,26 +1225,15 @@ class _OrderListPageState extends State<OrderListPage> {
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 12,
-              color: baseColor,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 12, color: baseColor, fontWeight: FontWeight.w600),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAmountItem({
-    required String label,
-    required String value,
-    required IconData icon,
-    bool highlight = false,
-  }) {
-    final Color accentColor = highlight
-        ? Theme.of(context).colorScheme.secondary
-        : Theme.of(context).primaryColor;
+  Widget _buildAmountItem({required String label, required String value, required IconData icon, bool highlight = false}) {
+    final Color accentColor = highlight ? Theme.of(context).colorScheme.secondary : Theme.of(context).primaryColor;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1716,17 +1247,12 @@ class _OrderListPageState extends State<OrderListPage> {
               children: [
                 TextSpan(
                   text: '$label: ',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey.shade700,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade700, fontWeight: FontWeight.w500),
                 ),
                 TextSpan(
                   text: value,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: highlight
-                        ? accentColor
-                        : Theme.of(context).textTheme.bodyMedium?.color,
+                    color: highlight ? accentColor : Theme.of(context).textTheme.bodyMedium?.color,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -1741,10 +1267,8 @@ class _OrderListPageState extends State<OrderListPage> {
   Widget _buildOrderCard(Map<String, dynamic> order) {
     final bool isComplete = (order['DocStatus'] == 'CO');
     final bool isReturn = _isReturnOrder(order);
-    final double totalLines =
-        double.tryParse(order['TotalLines']?.toString() ?? '0') ?? 0;
-    final double grandTotal =
-        double.tryParse(order['GrandTotal']?.toString() ?? '0') ?? 0;
+    final double totalLines = double.tryParse(order['TotalLines']?.toString() ?? '0') ?? 0;
+    final double grandTotal = double.tryParse(order['GrandTotal']?.toString() ?? '0') ?? 0;
     final double taxAmount = grandTotal - totalLines;
 
     final List invoices = order['C_Invoice'] ?? [];
@@ -1752,10 +1276,7 @@ class _OrderListPageState extends State<OrderListPage> {
 
     return GestureDetector(
       onTap: () async {
-        final refreshed = await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => OrderDetailPage(order: order)),
-        );
+        final refreshed = await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderDetailPage(order: order)));
         if (refreshed == true) {
           _loadHistory(page: _currentPage, resetCache: true);
         }
@@ -1766,16 +1287,8 @@ class _OrderListPageState extends State<OrderListPage> {
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-          border: Border.all(
-            color: Theme.of(context).dividerColor.withOpacity(0.1),
-          ),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+          border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.1)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1786,15 +1299,8 @@ class _OrderListPageState extends State<OrderListPage> {
                 Container(
                   height: 40,
                   width: 40,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.person,
-                    color: Theme.of(context).primaryColor,
-                    size: 20,
-                  ),
+                  decoration: BoxDecoration(color: Theme.of(context).primaryColor.withOpacity(0.1), shape: BoxShape.circle),
+                  child: Icon(Icons.person, color: Theme.of(context).primaryColor, size: 20),
                 ),
                 const SizedBox(width: 12),
 
@@ -1804,17 +1310,14 @@ class _OrderListPageState extends State<OrderListPage> {
                     children: [
                       Text(
                         order['bpartner']['name'],
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         '${order['doctypetarget']['name']} #${order['DocumentNo']}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey.shade600,
-                        ),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
                       ),
                     ],
                   ),
@@ -1831,10 +1334,7 @@ class _OrderListPageState extends State<OrderListPage> {
                         value: 'printTicket',
                         child: Row(
                           children: [
-                            const Icon(
-                              Icons.print_outlined,
-                              color: Colors.green,
-                            ),
+                            const Icon(Icons.print_outlined, color: Colors.green),
                             const SizedBox(width: 8),
                             Text(AppLocale.printTicket.getString(context)),
                           ],
@@ -1845,10 +1345,7 @@ class _OrderListPageState extends State<OrderListPage> {
                           value: 'printGiftInvoice',
                           child: Row(
                             children: [
-                              const Icon(
-                                Icons.card_giftcard,
-                                color: Colors.deepOrange,
-                              ),
+                              const Icon(Icons.card_giftcard, color: Colors.deepOrange),
                               const SizedBox(width: 8),
                               Text(AppLocale.giftInvoice.getString(context)),
                             ],
@@ -1858,10 +1355,7 @@ class _OrderListPageState extends State<OrderListPage> {
                         value: 'duplicate',
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.copy,
-                              color: Theme.of(context).primaryColor,
-                            ),
+                            Icon(Icons.copy, color: Theme.of(context).primaryColor),
                             const SizedBox(width: 8),
                             Text(AppLocale.duplicate.getString(context)),
                           ],
@@ -1871,14 +1365,9 @@ class _OrderListPageState extends State<OrderListPage> {
                         value: 'convert',
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.transform_outlined,
-                              color: Colors.purple.shade400,
-                            ),
+                            Icon(Icons.transform_outlined, color: Colors.purple.shade400),
                             const SizedBox(width: 8),
-                            Text(
-                              AppLocale.copyToNewDocument.getString(context),
-                            ),
+                            Text(AppLocale.copyToNewDocument.getString(context)),
                           ],
                         ),
                       ),
@@ -1894,11 +1383,7 @@ class _OrderListPageState extends State<OrderListPage> {
                           ),
                         ),
                     ];
-                    if (isReturn == false &&
-                        POS.isPOS == true &&
-                        isComplete &&
-                        !hasCreditNote &&
-                        invoices.isNotEmpty) {
+                    if (isReturn == false && POS.isPOS == true && isComplete && !hasCreditNote && invoices.isNotEmpty) {
                       items.add(
                         PopupMenuItem<String>(
                           value: 'refund',
@@ -1912,20 +1397,13 @@ class _OrderListPageState extends State<OrderListPage> {
                         ),
                       );
                     }
-                    if (!isReturn &&
-                        POS.isPOS == false &&
-                        isComplete == true &&
-                        !hasCreditNote &&
-                        invoices.isNotEmpty) {
+                    if (!isReturn && POS.isPOS == false && isComplete == true && !hasCreditNote && invoices.isNotEmpty) {
                       items.add(
                         PopupMenuItem<String>(
                           value: 'arc',
                           child: Row(
                             children: [
-                              const Icon(
-                                Icons.receipt_long_rounded,
-                                color: Colors.red,
-                              ),
+                              const Icon(Icons.receipt_long_rounded, color: Colors.red),
                               const SizedBox(width: 8),
                               Text(AppLocale.arc.getString(context)),
                             ],
@@ -1945,48 +1423,29 @@ class _OrderListPageState extends State<OrderListPage> {
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.secondary.withOpacity(0.06),
+                color: Theme.of(context).colorScheme.secondary.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.secondary.withOpacity(0.12),
-                ),
+                border: Border.all(color: Theme.of(context).colorScheme.secondary.withOpacity(0.12)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(
-                        Icons.payments_outlined,
-                        color: Theme.of(context).colorScheme.secondary,
-                        size: 18,
-                      ),
+                      Icon(Icons.payments_outlined, color: Theme.of(context).colorScheme.secondary, size: 18),
                       const SizedBox(width: 8),
                       Text(
                         AppLocale.summary.getString(context),
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.secondary,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.w700),
                       ),
                       const Spacer(),
-                      Icon(
-                        Icons.calendar_today_outlined,
-                        color: Colors.grey.shade500,
-                        size: 16,
-                      ),
+                      Icon(Icons.calendar_today_outlined, color: Colors.grey.shade500, size: 16),
                       const SizedBox(width: 6),
                       Text(
-                        formatIdempiereDateUI(
-                          order['Created']?.toString() ?? '',
-                        ),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.shade600,
-                        ),
+                        formatIdempiereDateUI(order['Created']?.toString() ?? ''),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
                       ),
                     ],
                   ),
@@ -2017,19 +1476,12 @@ class _OrderListPageState extends State<OrderListPage> {
               ),
             ),
 
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(height: 1, thickness: 0.5),
-            ),
+            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, thickness: 0.5)),
 
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: [
-                _buildSubtypePill(order),
-                _buildDocStatusPill(order),
-                if (hasCreditNote) _buildCreditMemoPill(),
-              ],
+              children: [_buildSubtypePill(order), _buildDocStatusPill(order), if (hasCreditNote) _buildCreditMemoPill()],
             ),
           ],
         ),
@@ -2041,10 +1493,7 @@ class _OrderListPageState extends State<OrderListPage> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const DashboardPage()),
-        );
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardPage()));
         return Future.value(false);
       },
       child: Scaffold(
@@ -2089,11 +1538,8 @@ class _OrderListPageState extends State<OrderListPage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => OrderNewPage(
-                        doctypeID: POS.docTypeID,
-                        orderName: POS.docTypeName,
-                        isRefund: POS.docSubType == 'RM',
-                      ),
+                      builder: (context) =>
+                          OrderNewPage(doctypeID: POS.docTypeID, orderName: POS.docTypeName, isRefund: POS.docSubType == 'RM'),
                     ),
                   );
                 },
@@ -2116,45 +1562,27 @@ class _OrderListPageState extends State<OrderListPage> {
                         ? ShimmerList(separation: CustomSpacer.medium)
                         : ListView.builder(
                             physics: const BouncingScrollPhysics(),
-                            itemCount: _getUnifiedHistory().isEmpty
-                                ? 2
-                                : _getUnifiedHistory().length + 1,
+                            itemCount: _getUnifiedHistory().isEmpty ? 2 : _getUnifiedHistory().length + 1,
                             itemBuilder: (context, index) {
                               if (_getUnifiedHistory().isEmpty && index == 0) {
                                 return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 40,
-                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 40),
                                   child: Center(
                                     child: Text(
-                                      AppLocale.noMatchesThisPage.getString(
-                                        context,
-                                      ),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge
-                                          ?.copyWith(color: Colors.grey),
+                                      AppLocale.noMatchesThisPage.getString(context),
+                                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey),
                                     ),
                                   ),
                                 );
                               }
-                              final footerIndex = _getUnifiedHistory().isEmpty
-                                  ? 1
-                                  : _getUnifiedHistory().length;
+                              final footerIndex = _getUnifiedHistory().isEmpty ? 1 : _getUnifiedHistory().length;
                               if (index == footerIndex) {
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 16,
-                                  ),
-                                  child: _buildPagination(),
-                                );
+                                return Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: _buildPagination());
                               }
                               final item = _getUnifiedHistory()[index];
                               return item is InvoicePaymentReceipt
                                   ? _buildInvoicePaymentCard(item)
-                                  : _buildOrderCard(
-                                      item as Map<String, dynamic>,
-                                    );
+                                  : _buildOrderCard(item as Map<String, dynamic>);
                             },
                           ),
                   ),
