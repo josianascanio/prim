@@ -11,6 +11,8 @@ import '../../../shared/footer.dart';
 import '../product/product_repository.dart';
 import '../product/product_sync_controller.dart';
 import '../order/order_history_repository.dart';
+import '../bpartner/bpartner_repository.dart';
+import '../bpartner/bpartner_sync_controller.dart';
 
 class DebugPage extends StatefulWidget {
   const DebugPage({super.key});
@@ -22,12 +24,14 @@ class DebugPage extends StatefulWidget {
 class _DebugPageState extends State<DebugPage> {
   late Future<int?> _productCacheSize;
   late Future<int?> _orderHistoryCacheSize;
+  late Future<int?> _bPartnerCacheSize;
 
   @override
   void initState() {
     super.initState();
     _productCacheSize = ProductRepository.instance.cacheSizeBytes();
     _orderHistoryCacheSize = OrderHistoryRepository.instance.cacheSizeBytes();
+    _bPartnerCacheSize = BPartnerRepository.instance.cacheSizeBytes();
   }
 
   String _formatBytes(int bytes) {
@@ -96,6 +100,37 @@ class _DebugPageState extends State<DebugPage> {
       _orderHistoryCacheSize = OrderHistoryRepository.instance.cacheSizeBytes();
     });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.orderCacheCleared.getString(context))));
+  }
+
+  Future<void> _clearBPartnerCache() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: Icon(Icons.delete_forever_outlined, color: Theme.of(dialogContext).colorScheme.error, size: 40),
+        title: Text(AppLocale.clearCustomerCacheTitle.getString(dialogContext)),
+        content: Text(AppLocale.clearCustomerCacheMessage.getString(dialogContext), textAlign: TextAlign.center),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(AppLocale.no.getString(dialogContext))),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(AppLocale.yes.getString(dialogContext)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await BPartnerSyncController.instance.stopAndWait();
+    await BPartnerRepository.instance.clearCache();
+    if (!mounted) return;
+    final refreshedCacheSize = BPartnerRepository.instance.cacheSizeBytes();
+    setState(() {
+      _bPartnerCacheSize = refreshedCacheSize;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.customerCacheCleared.getString(context))));
   }
 
   Color _getLogLevelColor(String level) {
@@ -385,6 +420,12 @@ class _DebugPageState extends State<DebugPage> {
                               size: _orderHistoryCacheSize,
                               deleteTooltip: AppLocale.clearOrderCache.getString(context),
                               onDelete: _clearOrderHistoryCache,
+                            ),
+                            _buildCacheRow(
+                              label: AppLocale.customerCacheSize.getString(context),
+                              size: _bPartnerCacheSize,
+                              deleteTooltip: AppLocale.clearCustomerCache.getString(context),
+                              onDelete: _clearBPartnerCache,
                             ),
                           ],
                         ),

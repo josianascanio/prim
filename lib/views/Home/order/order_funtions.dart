@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:http/http.dart';
@@ -11,6 +12,7 @@ import '../../Auth/auth_funtions.dart';
 import 'history_search_criteria.dart';
 import 'order_history_repository.dart';
 import '../product/product_repository.dart';
+import '../bpartner/bpartner_repository.dart';
 
 int? resolveEffectivePriceListID({
   required bool isPOS,
@@ -39,43 +41,11 @@ Future<List<Map<String, dynamic>>> fetchBPartner({
   String? searchTerm = '',
 }) async {
   try {
-    await usuarioAuth(context: context);
-    final filterQuery =
-        'IsCustomer eq true${searchTerm!.isNotEmpty ? ' and (contains(tolower(Name), \'${searchTerm.toLowerCase()}\') or contains(tolower(TaxID), \'${searchTerm.toLowerCase()}\'))' : ''}';
-
-    final response = await get(
-      Uri.parse(
-        '${EndPoints.cBPartner}?\$filter=$filterQuery&\$expand=AD_User,C_BPartner_Location',
-      ),
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': Token.auth!,
-      },
+    final page = await BPartnerRepository.instance.searchCustomers(
+      context: context,
+      searchTerm: searchTerm ?? '',
     );
-
-    if (response.statusCode == 200) {
-      final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
-      final records = jsonResponse['records'] as List;
-      return records.map((record) {
-        return {
-          'id': record['id'],
-          'name': record['Name'],
-          'TaxID': record['TaxID'],
-          'dv': record['dv'],
-          'M_PriceList_ID': record['M_PriceList_ID']?['id'],
-          'TipoClienteFE': record['TipoClienteFE']?['id'],
-          'LCO_TaxIdType_ID': record['LCO_TaxIdType_ID']?['id'],
-          'LCO_TaxIdTypeName': record['LCO_TaxIdType_ID']?['identifier'],
-          'C_BP_Group_ID': record['C_BP_Group_ID']?['id'],
-          'AD_User_ID': record['AD_User']?[0]?['id'],
-          'email': record['AD_User']?[0]?['EMail'],
-          'C_BPartner_Location_ID': record['C_BPartner_Location']?[0]?['id'],
-          'locationName': record['C_BPartner_Location']?[0]?['Name'],
-        };
-      }).toList();
-    } else {
-      throw Exception('Error al cargar los terceros: ${response.statusCode}');
-    }
+    return page.records;
   } catch (e) {
     CurrentLogMessage.add(
       'Excepción al obtener terceros: $e',
@@ -96,33 +66,18 @@ Future<bool> fetchBPartnerHasLocation({
       return false;
     }
 
-    await usuarioAuth(context: context);
-    final filterQuery = 'IsCustomer eq true and id eq $currentPartnerId';
-
-    final response = await get(
-      Uri.parse(
-        '${EndPoints.cBPartner}?\$filter=$filterQuery&\$expand=C_BPartner_Location',
-      ),
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': Token.auth!,
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
-      final records = jsonResponse['records'] as List;
-      if (records.isEmpty) {
-        return false;
-      }
-
-      final record = records.first;
-      return record['C_BPartner_Location']?[0]?['id'] != null;
-    } else {
-      throw Exception(
-        'Error al validar ubicación del tercero: ${response.statusCode}',
+    final cached = await BPartnerRepository.instance.readById(currentPartnerId);
+    if (cached != null) {
+      unawaited(
+        BPartnerRepository.instance
+            .refreshById(context: context, id: currentPartnerId)
+            .then<void>((_) {})
+            .catchError((_) {}),
       );
+      return cached['hasLocation'] == true;
     }
+    final partner = await BPartnerRepository.instance.refreshById(context: context, id: currentPartnerId);
+    return partner?['hasLocation'] == true;
   } catch (e) {
     CurrentLogMessage.add(
       'Excepción al validar ubicación del tercero: $e',

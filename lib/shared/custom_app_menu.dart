@@ -15,6 +15,7 @@ import 'package:primware/views/Home/order/held_ticket_page.dart';
 import 'package:primware/views/Home/invoice/invoice_new.dart';
 import 'package:primware/views/Home/product/product_view.dart';
 import 'package:primware/views/Home/product/product_sync_controller.dart';
+import 'package:primware/views/Home/bpartner/bpartner_sync_controller.dart';
 import 'package:primware/views/Home/report/close_cash_view.dart';
 import 'package:primware/views/Home/settings/degub_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -164,6 +165,7 @@ class _MenuDrawerState extends State<MenuDrawer> {
 
   Future<void> cleanSessionData() async {
     ProductSyncController.instance.cancelForSessionChange();
+    BPartnerSyncController.instance.cancelForSessionChange();
     // Limpiar controladores
     usuarioController.clear();
     claveController.clear();

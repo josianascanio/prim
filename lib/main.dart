@@ -14,6 +14,8 @@ import 'dart:async';
 import 'views/Home/product/product_repository.dart';
 import 'views/Home/product/product_sync_overlay.dart';
 import 'views/Home/order/order_history_repository.dart';
+import 'views/Home/bpartner/bpartner_repository.dart';
+import 'views/Home/bpartner/bpartner_sync_overlay.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -28,6 +30,7 @@ Future<void> main() async {
   await FlutterLocalization.instance.ensureInitialized();
   await ProductRepository.instance.initialize();
   await OrderHistoryRepository.instance.initialize();
+  await BPartnerRepository.instance.initialize();
   runApp(const MainApp());
 }
 
@@ -146,7 +149,11 @@ class _MainAppState extends State<MainApp> {
       locale: _localization.currentLocale,
       home: const LoginPage(),
       builder: (context, child) => Stack(
-        children: [if (child != null) child, const ProductSyncOverlay()],
+        children: [
+          if (child != null) child,
+          const ProductSyncOverlay(),
+          const BPartnerSyncOverlay(),
+        ],
       ),
     );
   }

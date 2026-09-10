@@ -29,6 +29,7 @@ import 'package:primware/shared/shimmer_list.dart';
 import 'product_selection_popup.dart';
 import 'held_ticket.dart';
 import '../product/product_repository.dart';
+import '../bpartner/bpartner_repository.dart';
 
 class OrderNewPage extends StatefulWidget {
   final bool isRefund;
@@ -85,6 +86,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
   final Map<int, Future<void>> _priceValidations = {};
   bool _applyingProductRepositoryUpdate = false;
   bool _productRepositoryUpdatePending = false;
+  String _bPartnerOptionsSearchTerm = '';
   List<Map<String, dynamic>> bPartnerOptions = [];
   List<Map<String, dynamic>> productOptions = [];
   List<Map<String, dynamic>> categpryOptions = [];
@@ -139,9 +141,10 @@ class _OrderNewPageState extends State<OrderNewPage> {
     _activeOrderSaver = () => _putOnHold(showConfirmation: false);
     HeldTicketStore.instance.activeOrderSaver = _activeOrderSaver;
     ProductRepository.instance.addListener(_onProductRepositoryChanged);
+    BPartnerRepository.instance.addListener(_onBPartnerRepositoryChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadBPartner(showLoadingIndicator: true);
+      _initializeBPartners();
       _loadSalesRep();
       _loadDocumentActions();
       _loadProduct();
@@ -150,7 +153,6 @@ class _OrderNewPageState extends State<OrderNewPage> {
       if (POSTenderType.isMultiPayment) {
         _loadPayment();
       }
-      if (widget.heldTicket == null) _initialPartner();
       if (widget.heldTicket != null) _restoreHeldTicket(widget.heldTicket!);
     });
 
@@ -319,16 +321,31 @@ class _OrderNewPageState extends State<OrderNewPage> {
   }
 
   Future<void> _initialPartner() async {
-    if (POS.templatePartnerID != null) {
-      final hasLocation = await fetchBPartnerHasLocation(context: context, partnerId: POS.templatePartnerID);
+    final partnerId = POS.templatePartnerID;
+    if (partnerId != null) {
+      final cachedPartner = bPartnerOptions.firstWhere((partner) => partner['id'] == partnerId, orElse: () => const <String, dynamic>{});
+      final hasLocation = cachedPartner.isNotEmpty
+          ? cachedPartner['hasLocation'] == true || cachedPartner['C_BPartner_Location_ID'] != null
+          : await fetchBPartnerHasLocation(context: context, partnerId: partnerId);
+      if (!mounted) return;
+
+      final dynamic rawPriceListID = cachedPartner['M_PriceList_ID'];
+      final int? priceListID = rawPriceListID is Map ? rawPriceListID['id'] as int? : rawPriceListID as int?;
 
       setState(() {
-        selectedBPartnerID = POS.templatePartnerID;
-        clienteController.text = POS.templatePartnerName ?? '';
+        selectedBPartnerID = partnerId;
+        clienteController.text = cachedPartner['name']?.toString() ?? POS.templatePartnerName ?? '';
+        bpartnerPriceListID = priceListID;
         hasLocationBPartner = hasLocation;
       });
       _validateForm();
     }
+  }
+
+  Future<void> _initializeBPartners() async {
+    await _loadBPartner(showLoadingIndicator: true, searchTerm: '');
+    if (!mounted || widget.heldTicket != null) return;
+    await _initialPartner();
   }
 
   Future<void> _loadPayment() async {
@@ -466,6 +483,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
   @override
   void dispose() {
     ProductRepository.instance.removeListener(_onProductRepositoryChanged);
+    BPartnerRepository.instance.removeListener(_onBPartnerRepositoryChanged);
     if (identical(HeldTicketStore.instance.activeOrderSaver, _activeOrderSaver)) {
       HeldTicketStore.instance.activeOrderSaver = null;
       HeldTicketStore.instance.activeTicketId = null;
@@ -475,6 +493,18 @@ class _OrderNewPageState extends State<OrderNewPage> {
     }
 
     super.dispose();
+  }
+
+  Future<void> _onBPartnerRepositoryChanged() async {
+    final partners = await BPartnerRepository.instance.readCached(searchTerm: _bPartnerOptionsSearchTerm);
+    if (!mounted) return;
+    setState(() {
+      bPartnerOptions = partners;
+      if (selectedBPartnerID != null) {
+        final selected = partners.firstWhere((item) => item['id'] == selectedBPartnerID, orElse: () => const <String, dynamic>{});
+        if (selected.isNotEmpty) hasLocationBPartner = selected['hasLocation'] == true;
+      }
+    });
   }
 
   Future<void> _onProductRepositoryChanged() async {
@@ -901,7 +931,9 @@ class _OrderNewPageState extends State<OrderNewPage> {
     return true;
   }
 
-  Future<void> _loadBPartner({bool showLoadingIndicator = false}) async {
+  Future<void> _loadBPartner({bool showLoadingIndicator = false, String? searchTerm}) async {
+    final effectiveSearchTerm = searchTerm ?? clienteController.text.trim();
+    _bPartnerOptionsSearchTerm = effectiveSearchTerm;
     if (showLoadingIndicator) {
       setState(() {
         isCustomerSearchLoading = true;
@@ -910,8 +942,9 @@ class _OrderNewPageState extends State<OrderNewPage> {
       });
     }
 
-    final partner = await fetchBPartner(context: context, searchTerm: clienteController.text.trim());
+    final partner = await fetchBPartner(context: context, searchTerm: effectiveSearchTerm);
 
+    if (!mounted) return;
     setState(() {
       bPartnerOptions = partner;
       isCustomerSearchLoading = false;
@@ -919,8 +952,8 @@ class _OrderNewPageState extends State<OrderNewPage> {
         canShowCreateCustomerButton = false;
         createAnchorCustomerTerm = null;
       } else {
-        canShowCreateCustomerButton = clienteController.text.trim().isNotEmpty;
-        createAnchorCustomerTerm = canShowCreateCustomerButton ? clienteController.text.trim() : null;
+        canShowCreateCustomerButton = effectiveSearchTerm.isNotEmpty;
+        createAnchorCustomerTerm = canShowCreateCustomerButton ? effectiveSearchTerm : null;
       }
     });
     if (mounted && firtsLoad) {
