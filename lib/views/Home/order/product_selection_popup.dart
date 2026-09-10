@@ -9,17 +9,25 @@ import '../product/product_repository.dart';
 import 'order_funtions.dart';
 
 class ProductSelectionResult {
-  const ProductSelectionResult({required this.products, required this.categoryIDs});
+  const ProductSelectionResult({required this.products, required this.quantities, required this.categoryIDs});
   final List<Map<String, dynamic>> products;
+  final Map<int, int> quantities;
   final Set<int> categoryIDs;
 }
 
 class ProductSelectionPopup extends StatefulWidget {
-  const ProductSelectionPopup({super.key, this.priceListID, this.initialSearch = '', this.initialCategoryIDs = const {}});
+  const ProductSelectionPopup({
+    super.key,
+    this.priceListID,
+    this.initialSearch = '',
+    this.initialCategoryIDs = const {},
+    this.initialOrderLines = const [],
+  });
 
   final int? priceListID;
   final String initialSearch;
   final Set<int> initialCategoryIDs;
+  final List<Map<String, dynamic>> initialOrderLines;
 
   static void clearGlobalCache() => ProductRepository.instance.clearMemory();
 
@@ -28,6 +36,7 @@ class ProductSelectionPopup extends StatefulWidget {
     int? priceListID,
     String initialSearch = '',
     Set<int> initialCategoryIDs = const {},
+    List<Map<String, dynamic>> initialOrderLines = const [],
     ValueChanged<Set<int>>? onCategoriesChanged,
   }) async {
     final result = await showGeneralDialog<ProductSelectionResult?>(
@@ -36,8 +45,12 @@ class ProductSelectionPopup extends StatefulWidget {
       barrierLabel: MaterialLocalizations.of(context).closeButtonTooltip,
       barrierColor: Colors.black.withOpacity(0.6),
       transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, _, _) =>
-          ProductSelectionPopup(priceListID: priceListID, initialSearch: initialSearch, initialCategoryIDs: initialCategoryIDs),
+      pageBuilder: (_, _, _) => ProductSelectionPopup(
+        priceListID: priceListID,
+        initialSearch: initialSearch,
+        initialCategoryIDs: initialCategoryIDs,
+        initialOrderLines: initialOrderLines,
+      ),
       transitionBuilder: (_, animation, _, child) => FadeTransition(
         opacity: animation,
         child: ScaleTransition(scale: Tween(begin: 0.97, end: 1.0).animate(animation), child: child),
@@ -58,6 +71,8 @@ class _ProductSelectionPopupState extends State<ProductSelectionPopup> with Sing
   late final TextEditingController _searchController;
   final ScrollController _scrollController = ScrollController();
   final Map<int, Map<String, dynamic>> _selectedProducts = {};
+  final Map<int, int> _quantities = {};
+  final Map<int, int> _initialQuantities = {};
   final Set<int> _favoriteIDs = {};
   final List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _categories = [];
@@ -81,17 +96,58 @@ class _ProductSelectionPopupState extends State<ProductSelectionPopup> with Sing
     _tabController.addListener(_onTabChanged);
     _searchController = TextEditingController(text: widget.initialSearch);
     _selectedCategoryIDs = {...widget.initialCategoryIDs};
+    for (final line in widget.initialOrderLines) {
+      final id = _productID(line);
+      if (id == null) continue;
+      final quantity = _asQuantity(line['quantity']);
+      if (quantity <= 0) continue;
+      _quantities[id] = (_quantities[id] ?? 0) + quantity;
+      _initialQuantities[id] = (_initialQuantities[id] ?? 0) + quantity;
+      _selectedProducts[id] = Map<String, dynamic>.from(line);
+    }
     _scrollController.addListener(_onScroll);
     ProductRepository.instance.addListener(_onRepositoryChanged);
     _initialize();
   }
 
   void _onTabChanged() {
-    if (_tabController.indexIsChanging || _tabController.index != 0 || !_categoryFilterDirty) {
+    if (_tabController.indexIsChanging || _tabController.index != 1 || !_categoryFilterDirty) {
       return;
     }
     _categoryFilterDirty = false;
     unawaited(_loadFirstPage());
+  }
+
+  static int? _productID(Map<String, dynamic> product) {
+    final raw = product['id'] ?? product['M_Product_ID'];
+    if (raw is Map) return int.tryParse(raw['id']?.toString() ?? '');
+    return raw is int ? raw : int.tryParse(raw?.toString() ?? '');
+  }
+
+  static int _asQuantity(dynamic value) {
+    final number = value is num ? value : num.tryParse(value?.toString() ?? '');
+    return number?.round() ?? 0;
+  }
+
+  int get _selectedUnitCount => _quantities.values.fold(0, (total, quantity) => total + quantity);
+
+  void _incrementProduct(Map<String, dynamic> product) {
+    final id = _productID(product);
+    if (id == null) return;
+    setState(() {
+      _selectedProducts[id] = product;
+      _quantities[id] = (_quantities[id] ?? 0) + 1;
+    });
+  }
+
+  void _decrementProduct(Map<String, dynamic> product) {
+    final id = _productID(product);
+    if (id == null) return;
+    setState(() {
+      final next = (_quantities[id] ?? 0) - 1;
+      _quantities[id] = next < 0 ? 0 : next;
+      if (next <= 0) _selectedProducts.remove(id);
+    });
   }
 
   @override
@@ -353,8 +409,8 @@ class _ProductSelectionPopupState extends State<ProductSelectionPopup> with Sing
                   labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                   unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                   tabs: [
-                    _buildTab(Icons.grid_view_rounded, AppLocale.products.getString(context)),
                     _buildTab(Icons.favorite_outline_rounded, AppLocale.favorites.getString(context)),
+                    _buildTab(Icons.grid_view_rounded, AppLocale.products.getString(context)),
                     _buildTab(Icons.folder_outlined, AppLocale.categories.getString(context)),
                   ],
                 ),
@@ -363,8 +419,8 @@ class _ProductSelectionPopupState extends State<ProductSelectionPopup> with Sing
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    _buildProductGrid(_products, loadMore: true),
                     _buildProductGrid(_products.where((item) => _favoriteIDs.contains(item['id'])).toList()),
+                    _buildProductGrid(_products, loadMore: true),
                     _buildCategoryGrid(),
                   ],
                 ),
@@ -376,21 +432,32 @@ class _ProductSelectionPopupState extends State<ProductSelectionPopup> with Sing
                   children: [
                     Expanded(
                       child: Text(
-                        AppLocale.selectedProductsCount.getString(context).replaceAll('{count}', _selectedProducts.length.toString()),
+                        AppLocale.selectedUnitsCount.getString(context).replaceAll('{count}', _selectedUnitCount.toString()),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
                     TextButton(
-                      onPressed: _selectedProducts.isEmpty ? null : () => setState(_selectedProducts.clear),
+                      onPressed: _selectedProducts.isEmpty
+                          ? null
+                          : () => setState(() {
+                              for (final id in _selectedProducts.keys) {
+                                _quantities[id] = 0;
+                              }
+                              _selectedProducts.clear();
+                            }),
                       child: Text(AppLocale.clear.getString(context)),
                     ),
                     const SizedBox(width: 8),
                     FilledButton.icon(
-                      onPressed: _selectedProducts.isEmpty
+                      onPressed: _selectedProducts.isEmpty && _initialQuantities.isEmpty
                           ? null
                           : () => Navigator.pop(
                               context,
-                              ProductSelectionResult(products: _selectedProducts.values.toList(), categoryIDs: _selectedCategoryIDs),
+                              ProductSelectionResult(
+                                products: _selectedProducts.values.toList(),
+                                quantities: Map<int, int>.from(_quantities),
+                                categoryIDs: _selectedCategoryIDs,
+                              ),
                             ),
                       icon: const Icon(Icons.add_shopping_cart),
                       label: Text(AppLocale.addToOrder.getString(context)),
@@ -449,7 +516,8 @@ class _ProductSelectionPopupState extends State<ProductSelectionPopup> with Sing
   Widget _buildProductCard(Map<String, dynamic> product) {
     final id = product['id'] as int?;
     if (id == null) return const SizedBox.shrink();
-    final selected = _selectedProducts.containsKey(id);
+    final quantity = _quantities[id] ?? 0;
+    final selected = quantity > 0;
     final favorite = _favoriteIDs.contains(id);
     final colors = Theme.of(context).colorScheme;
     final stockLoading = product['stockLoading'] == true;
@@ -474,13 +542,7 @@ class _ProductSelectionPopupState extends State<ProductSelectionPopup> with Sing
           ],
         ),
         child: InkWell(
-          onTap: () => setState(() {
-            if (selected) {
-              _selectedProducts.remove(id);
-            } else {
-              _selectedProducts[id] = product;
-            }
-          }),
+          onTap: () => _incrementProduct(product),
           child: Padding(
             padding: const EdgeInsets.all(13),
             child: Column(
@@ -488,12 +550,69 @@ class _ProductSelectionPopupState extends State<ProductSelectionPopup> with Sing
               children: [
                 Row(
                   children: [
-                    if (selected)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: colors.primary, borderRadius: BorderRadius.circular(20)),
-                        child: Icon(Icons.check_rounded, color: colors.onPrimary, size: 16),
+                    if (selected) ...[
+                      Tooltip(
+                        message: AppLocale.decreaseQuantity.getString(context),
+                        child: SizedBox(
+                          width: 38,
+                          height: 38,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            onPressed: () => _decrementProduct(product),
+                            icon: const Icon(Icons.remove_rounded),
+                            style: IconButton.styleFrom(
+                              foregroundColor: colors.error,
+                              backgroundColor: colors.error.withOpacity(0.12),
+                              hoverColor: colors.error.withOpacity(0.18),
+                              highlightColor: colors.error.withOpacity(0.24),
+                            ),
+                          ),
+                        ),
                       ),
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        width: 38,
+                        height: 38,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 320),
+                          reverseDuration: const Duration(milliseconds: 120),
+                          switchInCurve: Curves.linear,
+                          switchOutCurve: Curves.linear,
+                          transitionBuilder: (child, animation) => FadeTransition(
+                            opacity: animation,
+                            child: ScaleTransition(
+                              scale: TweenSequence<double>([
+                                TweenSequenceItem(
+                                  tween: Tween<double>(begin: 0.6, end: 1.14).chain(CurveTween(curve: Curves.easeOut)),
+                                  weight: 55,
+                                ),
+                                TweenSequenceItem(
+                                  tween: Tween<double>(begin: 1.14, end: 0.96).chain(CurveTween(curve: Curves.easeInOut)),
+                                  weight: 25,
+                                ),
+                                TweenSequenceItem(
+                                  tween: Tween<double>(begin: 0.96, end: 1).chain(CurveTween(curve: Curves.easeOut)),
+                                  weight: 20,
+                                ),
+                              ]).animate(animation),
+                              child: child,
+                            ),
+                          ),
+                          child: Container(
+                            key: ValueKey<int>(quantity),
+                            width: 38,
+                            height: 38,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(color: colors.primary, shape: BoxShape.circle),
+                            child: Text(
+                              quantity.toString(),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: colors.onPrimary, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     const Spacer(),
                     SizedBox(
                       width: 38,

@@ -9,6 +9,7 @@ import 'package:primware/shared/custom_dropdown.dart';
 import 'package:primware/shared/logo.dart';
 import '../../../API/pos.api.dart';
 import '../../../shared/button.widget.dart';
+import '../../../shared/category_filter_sheet.dart';
 import '../../../shared/custom_app_menu.dart';
 import '../../../shared/custom_searchfield.dart';
 import '../../../shared/custom_spacer.dart';
@@ -138,7 +139,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
     _resumedTicketCreatedAt = widget.heldTicket?.createdAt;
     HeldTicketStore.instance.activeTicketId = _resumedTicketId;
 
-    _activeOrderSaver = () => _putOnHold(showConfirmation: false);
+    _activeOrderSaver = _autoPutOnHold;
     HeldTicketStore.instance.activeOrderSaver = _activeOrderSaver;
     ProductRepository.instance.addListener(_onProductRepositoryChanged);
     BPartnerRepository.instance.addListener(_onBPartnerRepositoryChanged);
@@ -223,6 +224,11 @@ class _OrderNewPageState extends State<OrderNewPage> {
     if (showConfirmation) {
       ToastMessage.show(context: context, message: AppLocale.heldTicketSaved.getString(context), type: ToastType.success);
     }
+  }
+
+  Future<void> _autoPutOnHold() async {
+    if (invoiceLines.isEmpty || isSending) return;
+    await _putOnHold(showConfirmation: true);
   }
 
   void _resetForNewOrder() {
@@ -1032,6 +1038,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
       priceListID: bpartnerPriceListID,
       initialSearch: productController.text.trim(),
       initialCategoryIDs: selectedCategories,
+      initialOrderLines: invoiceLines,
       onCategoriesChanged: (categories) {
         if (mounted) {
           setState(() => selectedCategories = categories);
@@ -1042,13 +1049,38 @@ class _OrderNewPageState extends State<OrderNewPage> {
     if (selection != null) {
       setState(() => selectedCategories = {...selection.categoryIDs});
       final selectedProducts = selection.products;
-      if (selectedProducts.isEmpty) return;
       if (POS.cPosID != null) {
         if (!await _resetPaymentsForProductChange()) return;
       }
       final addedLines = <Map<String, dynamic>>[];
       setState(() {
+        final existingProductIDs = <int>{};
+        for (var index = invoiceLines.length - 1; index >= 0; index--) {
+          final line = invoiceLines[index];
+          final rawID = line['id'] ?? line['M_Product_ID'];
+          final int? productID = rawID is Map
+              ? int.tryParse(rawID['id']?.toString() ?? '')
+              : rawID is int
+              ? rawID
+              : int.tryParse(rawID?.toString() ?? '');
+          if (productID == null || !selection.quantities.containsKey(productID)) {
+            continue;
+          }
+          final quantity = selection.quantities[productID] ?? 0;
+          if (quantity <= 0 || existingProductIDs.contains(productID)) {
+            invoiceLines.removeAt(index);
+          } else {
+            line['quantity'] = quantity;
+            existingProductIDs.add(productID);
+          }
+        }
         for (final item in selectedProducts) {
+          final int? productID = item['id'] as int?;
+          if (productID == null || existingProductIDs.contains(productID)) {
+            continue;
+          }
+          final quantity = selection.quantities[productID] ?? 0;
+          if (quantity <= 0) continue;
           final int? selectedTaxID = (item['C_Tax_ID'] ?? item['tax']?['id'] ?? selectedTax?['id']) as int?;
           final double priceActual = _r2((item['price'] ?? item['Price'] ?? 0).toDouble());
           final double priceList = _r2((item['PriceList'] ?? item['priceList'] ?? item['price'] ?? 0).toDouble());
@@ -1056,7 +1088,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
 
           final line = <String, dynamic>{
             ...item,
-            'quantity': 1,
+            'quantity': quantity,
             'price': priceActual,
             'C_Tax_ID': selectedTaxID,
             'Description': item['Description'] ?? '',
@@ -1066,6 +1098,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
             'priceSyncState': item['fromCache'] == true ? 'pending' : 'valid',
           };
           invoiceLines.add(line);
+          existingProductIDs.add(productID);
           addedLines.add(line);
         }
       });
@@ -2336,92 +2369,16 @@ class _OrderNewPageState extends State<OrderNewPage> {
                                               icon: const Icon(Icons.category),
                                               label: Text(AppLocale.categories.getString(context)),
                                               onPressed: () async {
-                                                Set<int> tempSelected = Set<int>.from(selectedCategories);
-                                                await showModalBottomSheet(
+                                                final result = await showCategoryFilterSheet(
                                                   context: context,
-                                                  isScrollControlled: true,
-                                                  builder: (context) {
-                                                    return StatefulBuilder(
-                                                      builder: (context, setModalState) {
-                                                        return SafeArea(
-                                                          child: Padding(
-                                                            padding: MediaQuery.of(context).viewInsets,
-                                                            child: Container(
-                                                              constraints: const BoxConstraints(maxHeight: 400),
-                                                              child: Column(
-                                                                mainAxisSize: MainAxisSize.min,
-                                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                                children: [
-                                                                  Padding(
-                                                                    padding: const EdgeInsets.all(16.0),
-                                                                    child: Text(
-                                                                      AppLocale.selectCategories.getString(context),
-                                                                      style: Theme.of(context).textTheme.bodyLarge,
-                                                                    ),
-                                                                  ),
-                                                                  Expanded(
-                                                                    child: ListView.builder(
-                                                                      shrinkWrap: true,
-                                                                      itemCount: categpryOptions.length,
-                                                                      itemBuilder: (context, idx) {
-                                                                        final cat = categpryOptions[idx];
-                                                                        final isSelected = tempSelected.contains(cat['id']);
-                                                                        return ListTile(
-                                                                          title: Text(cat['name']),
-                                                                          selected: isSelected,
-                                                                          onTap: () {
-                                                                            setModalState(() {
-                                                                              if (isSelected) {
-                                                                                tempSelected.remove(cat['id']);
-                                                                              } else {
-                                                                                tempSelected.add(cat['id']);
-                                                                              }
-                                                                            });
-                                                                          },
-                                                                          trailing: isSelected
-                                                                              ? const Icon(Icons.check, color: Colors.blue)
-                                                                              : null,
-                                                                        );
-                                                                      },
-                                                                    ),
-                                                                  ),
-                                                                  Padding(
-                                                                    padding: const EdgeInsets.all(16.0),
-                                                                    child: Row(
-                                                                      mainAxisAlignment: MainAxisAlignment.end,
-                                                                      children: [
-                                                                        TextButton(
-                                                                          onPressed: () {
-                                                                            Navigator.pop(context);
-                                                                          },
-                                                                          child: Text(AppLocale.cancel.getString(context)),
-                                                                        ),
-                                                                        const SizedBox(width: 8),
-                                                                        ElevatedButton(
-                                                                          onPressed: () {
-                                                                            Navigator.pop(context, tempSelected);
-                                                                          },
-                                                                          child: Text(AppLocale.apply.getString(context)),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        );
-                                                      },
-                                                    );
-                                                  },
-                                                ).then((result) {
-                                                  if (result != null && result is Set<int>) {
-                                                    setState(() {
-                                                      selectedCategories = Set<int>.from(result);
-                                                    });
-                                                    _loadProduct(showLoadingIndicator: true, requestFieldFocus: false);
-                                                  }
-                                                });
+                                                  categories: categpryOptions,
+                                                  selectedCategoryIDs: selectedCategories,
+                                                );
+                                                if (!mounted || result == null) {
+                                                  return;
+                                                }
+                                                setState(() => selectedCategories = result);
+                                                _loadProduct(showLoadingIndicator: true, requestFieldFocus: false);
                                               },
                                             ),
                                             Material(

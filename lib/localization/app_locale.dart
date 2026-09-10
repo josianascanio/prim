@@ -26,6 +26,8 @@ class AppLocale {
   static const String noProductsFound = 'noProductsFound';
   static const String selectProducts = 'selectProducts';
   static const String selectedProductsCount = 'selectedProductsCount';
+  static const String selectedUnitsCount = 'selectedUnitsCount';
+  static const String decreaseQuantity = 'decreaseQuantity';
   static const String addToOrder = 'addToOrder';
   static const String favorites = 'favorites';
   static const String noCategories = 'noCategories';
@@ -711,6 +713,8 @@ class AppLocale {
     noProductsFound: 'No products found.',
     selectProducts: 'Select products',
     selectedProductsCount: '{count} selected',
+    selectedUnitsCount: '{count} units selected',
+    decreaseQuantity: 'Decrease quantity',
     addToOrder: 'Add to order',
     favorites: 'Favorites',
     noCategories: 'No categories',
@@ -1183,6 +1187,8 @@ class AppLocale {
     noProductsFound: 'No se encontraron productos.',
     selectProducts: 'Selección de productos',
     selectedProductsCount: '{count} seleccionados',
+    selectedUnitsCount: '{count} unidades seleccionadas',
+    decreaseQuantity: 'Disminuir cantidad',
     addToOrder: 'Añadir a la orden',
     favorites: 'Favoritos',
     noCategories: 'No hay categorías',
