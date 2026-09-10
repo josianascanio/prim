@@ -42,7 +42,6 @@ Future<Uint8List> generateCloseCashCartaTicket(Map<String, dynamic> data) async 
   final List<dynamic> payments = (data['payments'] ?? []) as List<dynamic>;
 
   final baseTextStyle = pw.TextStyle(fontSize: 10);
-  final smallTextStyle = pw.TextStyle(fontSize: 8);
   final boldTextStyle = pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold);
   final titleStyle = pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold);
   final headerStyle = pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
@@ -50,7 +49,7 @@ Future<Uint8List> generateCloseCashCartaTicket(Map<String, dynamic> data) async 
   final theme = pw.ThemeData.withFont(base: pw.Font.helvetica(), bold: pw.Font.helveticaBold()).copyWith(defaultTextStyle: baseTextStyle);
 
   // Table Headers
-  pw.Widget _buildTableHeader(String text) {
+  pw.Widget buildTableHeader(String text) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(6),
       color: PdfColors.blueGrey800,
@@ -60,7 +59,7 @@ Future<Uint8List> generateCloseCashCartaTicket(Map<String, dynamic> data) async 
   }
 
   // Cell formatters
-  pw.Widget _buildCell(String text, {pw.TextAlign align = pw.TextAlign.left, bool isBold = false}) {
+  pw.Widget buildCell(String text, {pw.TextAlign align = pw.TextAlign.left, bool isBold = false}) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(6),
       alignment: align == pw.TextAlign.right ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
@@ -177,7 +176,7 @@ Future<Uint8List> generateCloseCashCartaTicket(Map<String, dynamic> data) async 
                   child: pw.Table(
                     border: pw.TableBorder.all(color: PdfColors.grey300),
                     children: [
-                      pw.TableRow(children: [_buildTableHeader('ÓRDENES')]),
+                      pw.TableRow(children: [buildTableHeader('ÓRDENES')]),
                       pw.TableRow(
                         children: [
                           pw.Padding(
@@ -225,7 +224,7 @@ Future<Uint8List> generateCloseCashCartaTicket(Map<String, dynamic> data) async 
                   child: pw.Table(
                     border: pw.TableBorder.all(color: PdfColors.grey300),
                     children: [
-                      pw.TableRow(children: [_buildTableHeader('DEVOLUCIONES')]),
+                      pw.TableRow(children: [buildTableHeader('DEVOLUCIONES')]),
                       pw.TableRow(
                         children: [
                           pw.Padding(
@@ -303,7 +302,7 @@ Future<Uint8List> generateCloseCashCartaTicket(Map<String, dynamic> data) async 
                   pw.TableRow(
                     decoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
                     children: [
-                      _buildTableHeader('Método'),
+                      buildTableHeader('Método'),
                       pw.Container(
                         padding: const pw.EdgeInsets.all(6),
                         alignment: pw.Alignment.centerRight,
@@ -320,11 +319,11 @@ Future<Uint8List> generateCloseCashCartaTicket(Map<String, dynamic> data) async 
 
                     return pw.TableRow(
                       children: [
-                        _buildCell(tenderName),
-                        _buildCell(money(amt), align: pw.TextAlign.right),
+                        buildCell(tenderName),
+                        buildCell(money(amt), align: pw.TextAlign.right),
                       ],
                     );
-                  }).toList(),
+                  }),
                 ],
               ),
             ],

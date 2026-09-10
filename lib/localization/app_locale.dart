@@ -310,6 +310,11 @@ class AppLocale {
   static const String clearProductCacheTitle = 'clearProductCacheTitle';
   static const String clearProductCacheMessage = 'clearProductCacheMessage';
   static const String productCacheCleared = 'productCacheCleared';
+  static const String orderCacheSize = 'orderCacheSize';
+  static const String clearOrderCache = 'clearOrderCache';
+  static const String clearOrderCacheTitle = 'clearOrderCacheTitle';
+  static const String clearOrderCacheMessage = 'clearOrderCacheMessage';
+  static const String orderCacheCleared = 'orderCacheCleared';
   static const String systemLogs = 'systemLogs';
   static const String notApplicable = 'notApplicable';
   static const String enabled = 'enabled';
@@ -604,6 +609,12 @@ class AppLocale {
     clearProductCacheMessage:
         'All locally synchronized product data will be deleted from this device. This action cannot be undone.',
     productCacheCleared: 'The product cache was cleared.',
+    orderCacheSize: 'Order cache (order_history_cache_v1)',
+    clearOrderCache: 'Clear order cache',
+    clearOrderCacheTitle: 'Clear order cache?',
+    clearOrderCacheMessage:
+        'All locally cached orders and payment receipts will be deleted from this device. This action cannot be undone.',
+    orderCacheCleared: 'The order cache was cleared.',
     systemLogs: 'System logs',
     notApplicable: 'Not applicable',
     enabled: 'Enabled',
@@ -1071,6 +1082,12 @@ class AppLocale {
     clearProductCacheMessage:
         'Se eliminarán de este dispositivo todos los productos sincronizados localmente. Esta acción no se puede deshacer.',
     productCacheCleared: 'El caché de productos fue eliminado.',
+    orderCacheSize: 'Caché de órdenes (order_history_cache_v1)',
+    clearOrderCache: 'Eliminar caché de órdenes',
+    clearOrderCacheTitle: '¿Eliminar el caché de órdenes?',
+    clearOrderCacheMessage:
+        'Se eliminarán de este dispositivo todas las órdenes y recibos de pago guardados localmente. Esta acción no se puede deshacer.',
+    orderCacheCleared: 'El caché de órdenes fue eliminado.',
     systemLogs: 'Logs del sistema',
     notApplicable: 'No aplica',
     enabled: 'Habilitado',

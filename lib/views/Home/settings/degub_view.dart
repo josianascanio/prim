@@ -10,6 +10,7 @@ import '../../../shared/custom_app_menu.dart';
 import '../../../shared/footer.dart';
 import '../product/product_repository.dart';
 import '../product/product_sync_controller.dart';
+import '../order/order_history_repository.dart';
 
 class DebugPage extends StatefulWidget {
   const DebugPage({super.key});
@@ -20,11 +21,13 @@ class DebugPage extends StatefulWidget {
 
 class _DebugPageState extends State<DebugPage> {
   late Future<int?> _productCacheSize;
+  late Future<int?> _orderHistoryCacheSize;
 
   @override
   void initState() {
     super.initState();
     _productCacheSize = ProductRepository.instance.cacheSizeBytes();
+    _orderHistoryCacheSize = OrderHistoryRepository.instance.cacheSizeBytes();
   }
 
   String _formatBytes(int bytes) {
@@ -40,21 +43,11 @@ class _DebugPageState extends State<DebugPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        icon: Icon(
-          Icons.delete_forever_outlined,
-          color: Theme.of(dialogContext).colorScheme.error,
-          size: 40,
-        ),
+        icon: Icon(Icons.delete_forever_outlined, color: Theme.of(dialogContext).colorScheme.error, size: 40),
         title: Text(AppLocale.clearProductCacheTitle.getString(dialogContext)),
-        content: Text(
-          AppLocale.clearProductCacheMessage.getString(dialogContext),
-          textAlign: TextAlign.center,
-        ),
+        content: Text(AppLocale.clearProductCacheMessage.getString(dialogContext), textAlign: TextAlign.center),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(AppLocale.no.getString(dialogContext)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(AppLocale.no.getString(dialogContext))),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(dialogContext).colorScheme.error,
@@ -73,9 +66,36 @@ class _DebugPageState extends State<DebugPage> {
     setState(() {
       _productCacheSize = ProductRepository.instance.cacheSizeBytes();
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocale.productCacheCleared.getString(context))),
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.productCacheCleared.getString(context))));
+  }
+
+  Future<void> _clearOrderHistoryCache() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: Icon(Icons.delete_forever_outlined, color: Theme.of(dialogContext).colorScheme.error, size: 40),
+        title: Text(AppLocale.clearOrderCacheTitle.getString(dialogContext)),
+        content: Text(AppLocale.clearOrderCacheMessage.getString(dialogContext), textAlign: TextAlign.center),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(AppLocale.no.getString(dialogContext))),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(AppLocale.yes.getString(dialogContext)),
+          ),
+        ],
+      ),
     );
+    if (confirmed != true) return;
+    await OrderHistoryRepository.instance.clearCache();
+    if (!mounted) return;
+    setState(() {
+      _orderHistoryCacheSize = OrderHistoryRepository.instance.cacheSizeBytes();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocale.orderCacheCleared.getString(context))));
   }
 
   Color _getLogLevelColor(String level) {
@@ -90,9 +110,7 @@ class _DebugPageState extends State<DebugPage> {
     if (posOnly && !POS.isPOS) {
       return AppLocale.notApplicable.getString(context);
     }
-    if (value == null ||
-        value.toString().trim().isEmpty ||
-        value.toString() == 'null') {
+    if (value == null || value.toString().trim().isEmpty || value.toString() == 'null') {
       return AppLocale.notApplicable.getString(context);
     }
     return value.toString();
@@ -126,23 +144,17 @@ class _DebugPageState extends State<DebugPage> {
           final compact = constraints.maxWidth < 500;
           final labelWidget = Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w500,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500),
           );
           final valueWidget = SelectableText(
             value,
             textAlign: compact ? TextAlign.start : TextAlign.end,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
           );
           if (compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [labelWidget, const SizedBox(height: 3), valueWidget],
-            );
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [labelWidget, const SizedBox(height: 3), valueWidget]);
           }
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,40 +169,64 @@ class _DebugPageState extends State<DebugPage> {
     );
   }
 
-  Widget _buildSection({
-    required String title,
-    required IconData icon,
-    required List<Widget> children,
-    bool showTopDivider = true,
+  Widget _buildCacheRow({
+    required String label,
+    required Future<int?> size,
+    required String deleteTooltip,
+    required VoidCallback onDelete,
   }) {
+    return FutureBuilder<int?>(
+      future: size,
+      builder: (context, snapshot) {
+        final value = snapshot.connectionState != ConnectionState.done
+            ? AppLocale.calculating.getString(context)
+            : snapshot.hasError || snapshot.data == null
+            ? AppLocale.notApplicable.getString(context)
+            : _formatBytes(snapshot.data!);
+        final colors = Theme.of(context).colorScheme;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant, fontWeight: FontWeight.w500),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SelectableText(
+                value,
+                textAlign: TextAlign.end,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 4),
+              IconButton(tooltip: deleteTooltip, onPressed: onDelete, color: colors.error, icon: const Icon(Icons.delete_outline)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSection({required String title, required IconData icon, required List<Widget> children, bool showTopDivider = true}) {
     final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (showTopDivider) ...[
-          const SizedBox(height: 8),
-          Divider(color: colors.outlineVariant),
-          const SizedBox(height: 8),
-        ],
+        if (showTopDivider) ...[const SizedBox(height: 8), Divider(color: colors.outlineVariant), const SizedBox(height: 8)],
         Row(
           children: [
             Container(
               width: 34,
               height: 34,
-              decoration: BoxDecoration(
-                color: colors.primary,
-                borderRadius: BorderRadius.circular(9),
-              ),
+              decoration: BoxDecoration(color: colors.primary, borderRadius: BorderRadius.circular(9)),
               child: Icon(icon, size: 19, color: colors.onPrimary),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
+              child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             ),
           ],
         ),
@@ -211,15 +247,8 @@ class _DebugPageState extends State<DebugPage> {
           Container(
             width: 48,
             height: 48,
-            decoration: BoxDecoration(
-              color: accent.withOpacity(0.16),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isPOS ? Icons.point_of_sale : Icons.storefront_outlined,
-              color: accent,
-              size: 26,
-            ),
+            decoration: BoxDecoration(color: accent.withOpacity(0.16), shape: BoxShape.circle),
+            child: Icon(isPOS ? Icons.point_of_sale : Icons.storefront_outlined, color: accent, size: 26),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -227,19 +256,12 @@ class _DebugPageState extends State<DebugPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  (isPOS ? AppLocale.pointOfSaleMode : AppLocale.salesForceMode)
-                      .getString(context),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: accent,
-                  ),
+                  (isPOS ? AppLocale.pointOfSaleMode : AppLocale.salesForceMode).getString(context),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: accent),
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  (isPOS
-                          ? AppLocale.pointOfSaleModeDescription
-                          : AppLocale.salesForceModeDescription)
-                      .getString(context),
+                  (isPOS ? AppLocale.pointOfSaleModeDescription : AppLocale.salesForceModeDescription).getString(context),
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
@@ -255,10 +277,7 @@ class _DebugPageState extends State<DebugPage> {
     final idLabel = AppLocale.identifier.getString(context);
     return Scaffold(
       drawer: const MenuDrawer(),
-      appBar: AppBar(
-        title: Text(AppLocale.console.getString(context)),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(AppLocale.console.getString(context)), centerTitle: true),
       bottomNavigationBar: const CustomFooter(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -273,11 +292,7 @@ class _DebugPageState extends State<DebugPage> {
                   color: Theme.of(context).colorScheme.surfaceContainerLow,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.outlineVariant.withOpacity(0.65),
-                    ),
+                    side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.65)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(18),
@@ -289,90 +304,38 @@ class _DebugPageState extends State<DebugPage> {
                           title: AppLocale.sessionParameters.getString(context),
                           icon: Icons.dns_outlined,
                           children: [
-                            _buildInfoRow(
-                              AppLocale.production.getString(context),
-                              _boolValue(Base.prod),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.instance.getString(context),
-                              _value(Base.baseURL),
-                            ),
+                            _buildInfoRow(AppLocale.production.getString(context), _boolValue(Base.prod)),
+                            _buildInfoRow(AppLocale.instance.getString(context), _value(Base.baseURL)),
                           ],
                         ),
                         _buildSection(
-                          title: AppLocale.terminalParameters.getString(
-                            context,
-                          ),
+                          title: AppLocale.terminalParameters.getString(context),
                           icon: Icons.point_of_sale_outlined,
                           children: [
-                            _buildInfoRow(
-                              '${AppLocale.posTerminal.getString(context)} $idLabel',
-                              _value(POS.cPosID, posOnly: true),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.modifyPricePermission.getString(
-                                context,
-                              ),
-                              _boolValue(POS.isModifyPrice, posOnly: true),
-                            ),
+                            _buildInfoRow('${AppLocale.posTerminal.getString(context)} $idLabel', _value(POS.cPosID, posOnly: true)),
+                            _buildInfoRow(AppLocale.modifyPricePermission.getString(context), _boolValue(POS.isModifyPrice, posOnly: true)),
                             _buildInfoRow(
                               AppLocale.defaultCustomer.getString(context),
-                              _namedValue(
-                                POS.templatePartnerID,
-                                POS.templatePartnerName,
-                                posOnly: true,
-                              ),
+                              _namedValue(POS.templatePartnerID, POS.templatePartnerName, posOnly: true),
                             ),
-                            _buildInfoRow(
-                              AppLocale.priceList.getString(context),
-                              _value(POS.priceListID),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.priceListVersion.getString(context),
-                              _value(POS.priceListVersionID),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.warehouse.getString(context),
-                              _value(POS.warehouseID ?? Token.warehouseID),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.paymentTerm.getString(context),
-                              _value(POS.cPaymentTermID),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.bankAccount.getString(context),
-                              _value(POS.bankAccountID, posOnly: true),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.salesDocumentType.getString(context),
-                              _namedValue(POS.docTypeID, POS.docTypeName),
-                            ),
+                            _buildInfoRow(AppLocale.priceList.getString(context), _value(POS.priceListID)),
+                            _buildInfoRow(AppLocale.priceListVersion.getString(context), _value(POS.priceListVersionID)),
+                            _buildInfoRow(AppLocale.warehouse.getString(context), _value(POS.warehouseID ?? Token.warehouseID)),
+                            _buildInfoRow(AppLocale.paymentTerm.getString(context), _value(POS.cPaymentTermID)),
+                            _buildInfoRow(AppLocale.bankAccount.getString(context), _value(POS.bankAccountID, posOnly: true)),
+                            _buildInfoRow(AppLocale.salesDocumentType.getString(context), _namedValue(POS.docTypeID, POS.docTypeName)),
                             _buildInfoRow(
                               AppLocale.refundDocumentType.getString(context),
-                              _namedValue(
-                                POS.docTypeRefundID,
-                                POS.docTypeRefundName,
-                                posOnly: true,
-                              ),
+                              _namedValue(POS.docTypeRefundID, POS.docTypeRefundName, posOnly: true),
                             ),
-                            _buildInfoRow(
-                              AppLocale.discountCharge.getString(context),
-                              _value(POS.discountChargeID, posOnly: true),
-                            ),
+                            _buildInfoRow(AppLocale.discountCharge.getString(context), _value(POS.discountChargeID, posOnly: true)),
                             _buildInfoRow(
                               AppLocale.discountTax.getString(context),
-                              _namedValue(
-                                POS.discountTaxID,
-                                POS.discountTaxRate,
-                                posOnly: true,
-                              ),
+                              _namedValue(POS.discountTaxID, POS.discountTaxRate, posOnly: true),
                             ),
                             _buildInfoRow(
                               AppLocale.multiplePayments.getString(context),
-                              _boolValue(
-                                POSTenderType.isMultiPayment,
-                                posOnly: true,
-                              ),
+                              _boolValue(POSTenderType.isMultiPayment, posOnly: true),
                             ),
                           ],
                         ),
@@ -381,107 +344,47 @@ class _DebugPageState extends State<DebugPage> {
                           icon: Icons.person_outline,
                           children: [
                             _buildInfoRow(idLabel, _value(UserData.id)),
-                            _buildInfoRow(
-                              AppLocale.name.getString(context),
-                              _value(UserData.name),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.email.getString(context),
-                              _value(UserData.email),
-                            ),
+                            _buildInfoRow(AppLocale.name.getString(context), _value(UserData.name)),
+                            _buildInfoRow(AppLocale.email.getString(context), _value(UserData.email)),
                           ],
                         ),
                         _buildSection(
-                          title: AppLocale.organizationParameters.getString(
-                            context,
-                          ),
+                          title: AppLocale.organizationParameters.getString(context),
                           icon: Icons.business_outlined,
                           children: [
-                            _buildInfoRow(
-                              AppLocale.company.getString(context),
-                              _namedValue(Token.client, UserData.clientName),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.role.getString(context),
-                              _namedValue(Token.rol, UserData.rolName),
-                            ),
-                            _buildInfoRow(
-                              '${AppLocale.organization.getString(context)} $idLabel',
-                              _value(Token.organitation),
-                            ),
-                            _buildInfoRow(
-                              '${AppLocale.warehouse.getString(context)} $idLabel',
-                              _value(Token.warehouseID),
-                            ),
+                            _buildInfoRow(AppLocale.company.getString(context), _namedValue(Token.client, UserData.clientName)),
+                            _buildInfoRow(AppLocale.role.getString(context), _namedValue(Token.rol, UserData.rolName)),
+                            _buildInfoRow('${AppLocale.organization.getString(context)} $idLabel', _value(Token.organitation)),
+                            _buildInfoRow('${AppLocale.warehouse.getString(context)} $idLabel', _value(Token.warehouseID)),
                           ],
                         ),
                         _buildSection(
-                          title: AppLocale.printingParameters.getString(
-                            context,
-                          ),
+                          title: AppLocale.printingParameters.getString(context),
                           icon: Icons.print_outlined,
                           children: [
-                            _buildInfoRow(
-                              AppLocale.printerName.getString(context),
-                              _value(POSPrinter.headerName),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.printerAddress.getString(context),
-                              _value(POSPrinter.headerAddress),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.printerTaxId.getString(context),
-                              _value(POSPrinter.headerTaxID),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.printerDv.getString(context),
-                              _value(POSPrinter.headerDV),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.printerPhone.getString(context),
-                              _value(POSPrinter.headerPhone),
-                            ),
-                            _buildInfoRow(
-                              AppLocale.printerEmail.getString(context),
-                              _value(POSPrinter.headerEmail),
-                            ),
+                            _buildInfoRow(AppLocale.printerName.getString(context), _value(POSPrinter.headerName)),
+                            _buildInfoRow(AppLocale.printerAddress.getString(context), _value(POSPrinter.headerAddress)),
+                            _buildInfoRow(AppLocale.printerTaxId.getString(context), _value(POSPrinter.headerTaxID)),
+                            _buildInfoRow(AppLocale.printerDv.getString(context), _value(POSPrinter.headerDV)),
+                            _buildInfoRow(AppLocale.printerPhone.getString(context), _value(POSPrinter.headerPhone)),
+                            _buildInfoRow(AppLocale.printerEmail.getString(context), _value(POSPrinter.headerEmail)),
                           ],
                         ),
                         _buildSection(
                           title: AppLocale.cacheParameters.getString(context),
                           icon: Icons.storage_outlined,
                           children: [
-                            FutureBuilder<int?>(
-                              future: _productCacheSize,
-                              builder: (context, snapshot) => _buildInfoRow(
-                                AppLocale.productCacheSize.getString(context),
-                                snapshot.connectionState != ConnectionState.done
-                                    ? AppLocale.calculating.getString(context)
-                                    : snapshot.hasError || snapshot.data == null
-                                    ? AppLocale.notApplicable.getString(context)
-                                    : _formatBytes(snapshot.data!),
-                              ),
+                            _buildCacheRow(
+                              label: AppLocale.productCacheSize.getString(context),
+                              size: _productCacheSize,
+                              deleteTooltip: AppLocale.clearProductCache.getString(context),
+                              onDelete: _clearProductCache,
                             ),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Theme.of(
-                                    context,
-                                  ).colorScheme.error,
-                                  side: BorderSide(
-                                    color: Theme.of(context).colorScheme.error,
-                                  ),
-                                ),
-                                onPressed: _clearProductCache,
-                                icon: const Icon(Icons.delete_outline),
-                                label: Text(
-                                  AppLocale.clearProductCache.getString(
-                                    context,
-                                  ),
-                                ),
-                              ),
+                            _buildCacheRow(
+                              label: AppLocale.orderCacheSize.getString(context),
+                              size: _orderHistoryCacheSize,
+                              deleteTooltip: AppLocale.clearOrderCache.getString(context),
+                              onDelete: _clearOrderHistoryCache,
                             ),
                           ],
                         ),
@@ -501,8 +404,7 @@ class _DebugPageState extends State<DebugPage> {
                           Flexible(
                             child: Text(
                               AppLocale.systemLogs.getString(context),
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.bold),
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
@@ -522,13 +424,7 @@ class _DebugPageState extends State<DebugPage> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF1E1E1E),
                     borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))],
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
@@ -544,11 +440,7 @@ class _DebugPageState extends State<DebugPage> {
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           child: SelectableText.rich(
                             TextSpan(
-                              style: const TextStyle(
-                                fontFamily: 'Courier',
-                                fontSize: 13,
-                                height: 1.4,
-                              ),
+                              style: const TextStyle(fontFamily: 'Courier', fontSize: 13, height: 1.4),
                               children: [
                                 TextSpan(
                                   text: '[$ts] ',
@@ -556,10 +448,7 @@ class _DebugPageState extends State<DebugPage> {
                                 ),
                                 TextSpan(
                                   text: '${level.padRight(5)}: ',
-                                  style: TextStyle(
-                                    color: _getLogLevelColor(level),
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: TextStyle(color: _getLogLevelColor(level), fontWeight: FontWeight.bold),
                                 ),
                                 TextSpan(
                                   text: message,
