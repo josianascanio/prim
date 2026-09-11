@@ -20,6 +20,7 @@ import 'login_view.dart';
 import 'loading_dialog.dart';
 import '../Home/order/product_selection_popup.dart';
 import '../Home/product/product_sync_controller.dart';
+import '../Home/bpartner/bpartner_sync_controller.dart';
 import '../../shared/glass_switch.dart';
 
 class ConfigPage extends StatefulWidget {
@@ -240,6 +241,7 @@ class _ConfigPageState extends State<ConfigPage> {
       clearDashboardRawCache();
       ProductSelectionPopup.clearGlobalCache();
       ProductSyncController.instance.cancelForSessionChange();
+      BPartnerSyncController.instance.cancelForSessionChange();
 
       bool login = await usuarioAuth(context: context, forceNewToken: true);
 

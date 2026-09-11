@@ -9,6 +9,7 @@ import '../../../shared/custom_spacer.dart';
 import '../../../shared/footer.dart';
 import '../../../shared/shimmer_list.dart';
 import '../../../shared/custom_textfield.dart';
+import '../../../shared/category_filter_sheet.dart';
 import '../dashboard/dashboard_view.dart';
 import '../order/order_funtions.dart';
 import 'product_new.dart';
@@ -267,203 +268,14 @@ class _ProductListPageState extends State<ProductListPage> {
   }
 
   Future<void> _openCategoryFilter() async {
-    Set<int> tempSelected = Set<int>.from(selectedCategories);
-
-    await showModalBottomSheet(
+    final result = await showCategoryFilterSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-              ),
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.65,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 12),
-                  Container(
-                    width: 40,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  Text(
-                    AppLocale.selectCategories.getString(context),
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  Divider(height: 1, color: Colors.grey.withOpacity(0.2)),
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 16,
-                      ),
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: categpryOptions.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 12),
-                      itemBuilder: (context, idx) {
-                        final cat = categpryOptions[idx];
-                        final isSelected = tempSelected.contains(cat['id']);
-
-                        return InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: () {
-                            setModalState(() {
-                              if (isSelected) {
-                                tempSelected.remove(cat['id']);
-                              } else {
-                                tempSelected.add(cat['id']);
-                              }
-                            });
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 16,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? Theme.of(
-                                      context,
-                                    ).primaryColor.withOpacity(0.1)
-                                  : Theme.of(context).cardColor,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isSelected
-                                    ? Theme.of(context).primaryColor
-                                    : Colors.grey.withOpacity(0.2),
-                                width: isSelected ? 1.5 : 1.0,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    cat['name'],
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: isSelected
-                                          ? FontWeight.bold
-                                          : FontWeight.w500,
-                                      color: isSelected
-                                          ? Theme.of(context).primaryColor
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                                if (isSelected)
-                                  Icon(
-                                    Icons.check_circle,
-                                    color: Theme.of(context).primaryColor,
-                                  )
-                                else
-                                  Icon(
-                                    Icons.circle_outlined,
-                                    color: Colors.grey.withOpacity(0.4),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(24.0),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).scaffoldBackgroundColor,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, -5),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              backgroundColor: Theme.of(context).primaryColor,
-                              elevation: 0,
-                            ),
-                            onPressed: () =>
-                                Navigator.pop(context, tempSelected),
-                            child: Text(
-                              AppLocale.apply.getString(context),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: TextButton(
-                            style: TextButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                            child: Text(
-                              AppLocale.cancel.getString(context),
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    ).then((result) {
-      if (result != null && result is Set<int>) {
-        setState(() => selectedCategories = Set<int>.from(result));
-        _loadProduct(showLoadingIndicator: true);
-      }
-    });
+      categories: categpryOptions,
+      selectedCategoryIDs: selectedCategories,
+    );
+    if (!mounted || result == null) return;
+    setState(() => selectedCategories = result);
+    _loadProduct(showLoadingIndicator: true);
   }
 
   Future<void> _showCreateCategoryDialog() async {

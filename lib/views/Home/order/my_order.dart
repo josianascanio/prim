@@ -28,6 +28,7 @@ import '../invoice/invoice_funtions.dart';
 import '../invoice/invoice_payment_print_generator.dart';
 import '../invoice/invoice_payment_receipt.dart';
 import 'history_search_criteria.dart';
+import 'order_history_repository.dart';
 
 class OrderListPage extends StatefulWidget {
   const OrderListPage({super.key});
@@ -242,15 +243,27 @@ class _OrderListPageState extends State<OrderListPage> {
   @override
   void initState() {
     super.initState();
+    OrderHistoryRepository.instance.addListener(_onHistoryCacheChanged);
     _initializeHistory();
   }
 
   @override
   void dispose() {
+    OrderHistoryRepository.instance.removeListener(_onHistoryCacheChanged);
     _customerSearchController.dispose();
     _documentSearchController.dispose();
     _localFilterController.dispose();
     super.dispose();
+  }
+
+  Future<void> _onHistoryCacheChanged() async {
+    final cached = await OrderHistoryRepository.instance.readPage(criteria: _appliedCriteria, pageIndex: _currentPage);
+    if (!mounted || cached == null || isSearchLoading) return;
+    setState(() {
+      _orders = cached.orders;
+      _invoicePaymentReceipts = cached.receipts;
+      _totalRecords = cached.totalCount;
+    });
   }
 
   Future<void> _initializeHistory() async {
@@ -309,19 +322,41 @@ class _OrderListPageState extends State<OrderListPage> {
 
   Future<void> _loadHistory({bool initialLoad = false, int page = 0, bool resetCache = false}) async {
     if (!mounted) return;
+    var hasCachedPage = false;
+    if (resetCache) _pageCache.clear();
     if (!resetCache && _pageCache[page] != null) {
       final cached = _pageCache[page]!;
       setState(() {
         _currentPage = page;
         _totalRecords = cached.totalCount;
         _assignHistoryItems(cached.items);
+        _isLoading = false;
+        _isLoadingReceipts = false;
       });
-      return;
+      hasCachedPage = true;
+    } else {
+      final cached = await OrderHistoryRepository.instance.readPage(criteria: _pendingCriteria, pageIndex: page);
+      if (!mounted) return;
+      if (cached != null) {
+        final items = <Object>[...cached.orders, ...cached.receipts]
+          ..sort((left, right) => _historyDate(right).compareTo(_historyDate(left)));
+        final memoryPage = UnifiedHistoryPage(items: items, totalCount: cached.totalCount, pageIndex: page);
+        setState(() {
+          _pageCache[page] = memoryPage;
+          _currentPage = page;
+          _totalRecords = cached.totalCount;
+          _assignHistoryItems(items);
+          _appliedCriteria = _pendingCriteria;
+          _isLoading = false;
+          _isLoadingReceipts = false;
+        });
+        hasCachedPage = true;
+      }
     }
     setState(() {
-      _isLoading = initialLoad;
-      _isLoadingReceipts = initialLoad;
-      isSearchLoading = !initialLoad;
+      _isLoading = !hasCachedPage;
+      _isLoadingReceipts = !hasCachedPage;
+      isSearchLoading = !initialLoad && !hasCachedPage;
     });
     try {
       final results = await Future.wait<dynamic>([
@@ -349,8 +384,15 @@ class _OrderListPageState extends State<OrderListPage> {
       final items = <Object>[...orderPage.records, ...receiptPage.records]
         ..sort((left, right) => _historyDate(right).compareTo(_historyDate(left)));
       final unified = UnifiedHistoryPage(items: items, totalCount: orderPage.rowCount + receiptPage.rowCount, pageIndex: page);
+      await OrderHistoryRepository.instance.writePage(
+        criteria: _pendingCriteria,
+        pageIndex: page,
+        orders: orderPage.records,
+        receipts: receiptPage.records,
+        totalCount: unified.totalCount,
+      );
+      if (!mounted) return;
       setState(() {
-        if (resetCache) _pageCache.clear();
         _pageCache[page] = unified;
         _assignHistoryItems(items);
         _currentPage = page;
@@ -367,7 +409,9 @@ class _OrderListPageState extends State<OrderListPage> {
         _isLoadingReceipts = false;
         isSearchLoading = false;
       });
-      ToastMessage.show(context: context, message: _localized(AppLocale.historyUpdateError, {'error': error}), type: ToastType.failure);
+      if (!hasCachedPage) {
+        ToastMessage.show(context: context, message: _localized(AppLocale.historyUpdateError, {'error': error}), type: ToastType.failure);
+      }
     }
   }
 
@@ -1023,14 +1067,16 @@ class _OrderListPageState extends State<OrderListPage> {
 
         if (confirm == true) {
           if (!mounted) return;
-          await Navigator.push(
+          final completed = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
               builder: (_) =>
                   OrderNewPage(isRefund: true, doctypeID: POS.docTypeRefundID, orderName: POS.docTypeRefundName, sourceOrderId: orderId),
             ),
           );
-          if (mounted) await _loadHistory(page: _currentPage, resetCache: true);
+          if (mounted && completed == true) {
+            await _loadHistory(page: _currentPage, resetCache: true);
+          }
         }
         break;
       case 'convertQuote':
@@ -1508,8 +1554,6 @@ class _OrderListPageState extends State<OrderListPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildLocalFilterField(),
-
-                  if (isSearchLoading) ...[const SizedBox(height: 4), const LinearProgressIndicator(), const SizedBox(height: 8)],
 
                   const SizedBox(height: CustomSpacer.medium),
 

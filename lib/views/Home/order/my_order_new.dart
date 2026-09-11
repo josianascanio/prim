@@ -9,6 +9,7 @@ import 'package:primware/shared/custom_dropdown.dart';
 import 'package:primware/shared/logo.dart';
 import '../../../API/pos.api.dart';
 import '../../../shared/button.widget.dart';
+import '../../../shared/category_filter_sheet.dart';
 import '../../../shared/custom_app_menu.dart';
 import '../../../shared/custom_searchfield.dart';
 import '../../../shared/custom_spacer.dart';
@@ -29,6 +30,7 @@ import 'package:primware/shared/shimmer_list.dart';
 import 'product_selection_popup.dart';
 import 'held_ticket.dart';
 import '../product/product_repository.dart';
+import '../bpartner/bpartner_repository.dart';
 
 class OrderNewPage extends StatefulWidget {
   final bool isRefund;
@@ -85,6 +87,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
   final Map<int, Future<void>> _priceValidations = {};
   bool _applyingProductRepositoryUpdate = false;
   bool _productRepositoryUpdatePending = false;
+  String _bPartnerOptionsSearchTerm = '';
   List<Map<String, dynamic>> bPartnerOptions = [];
   List<Map<String, dynamic>> productOptions = [];
   List<Map<String, dynamic>> categpryOptions = [];
@@ -136,12 +139,13 @@ class _OrderNewPageState extends State<OrderNewPage> {
     _resumedTicketCreatedAt = widget.heldTicket?.createdAt;
     HeldTicketStore.instance.activeTicketId = _resumedTicketId;
 
-    _activeOrderSaver = () => _putOnHold(showConfirmation: false);
+    _activeOrderSaver = _autoPutOnHold;
     HeldTicketStore.instance.activeOrderSaver = _activeOrderSaver;
     ProductRepository.instance.addListener(_onProductRepositoryChanged);
+    BPartnerRepository.instance.addListener(_onBPartnerRepositoryChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadBPartner(showLoadingIndicator: true);
+      _initializeBPartners();
       _loadSalesRep();
       _loadDocumentActions();
       _loadProduct();
@@ -150,7 +154,6 @@ class _OrderNewPageState extends State<OrderNewPage> {
       if (POSTenderType.isMultiPayment) {
         _loadPayment();
       }
-      if (widget.heldTicket == null) _initialPartner();
       if (widget.heldTicket != null) _restoreHeldTicket(widget.heldTicket!);
     });
 
@@ -221,6 +224,11 @@ class _OrderNewPageState extends State<OrderNewPage> {
     if (showConfirmation) {
       ToastMessage.show(context: context, message: AppLocale.heldTicketSaved.getString(context), type: ToastType.success);
     }
+  }
+
+  Future<void> _autoPutOnHold() async {
+    if (invoiceLines.isEmpty || isSending) return;
+    await _putOnHold(showConfirmation: true);
   }
 
   void _resetForNewOrder() {
@@ -319,16 +327,31 @@ class _OrderNewPageState extends State<OrderNewPage> {
   }
 
   Future<void> _initialPartner() async {
-    if (POS.templatePartnerID != null) {
-      final hasLocation = await fetchBPartnerHasLocation(context: context, partnerId: POS.templatePartnerID);
+    final partnerId = POS.templatePartnerID;
+    if (partnerId != null) {
+      final cachedPartner = bPartnerOptions.firstWhere((partner) => partner['id'] == partnerId, orElse: () => const <String, dynamic>{});
+      final hasLocation = cachedPartner.isNotEmpty
+          ? cachedPartner['hasLocation'] == true || cachedPartner['C_BPartner_Location_ID'] != null
+          : await fetchBPartnerHasLocation(context: context, partnerId: partnerId);
+      if (!mounted) return;
+
+      final dynamic rawPriceListID = cachedPartner['M_PriceList_ID'];
+      final int? priceListID = rawPriceListID is Map ? rawPriceListID['id'] as int? : rawPriceListID as int?;
 
       setState(() {
-        selectedBPartnerID = POS.templatePartnerID;
-        clienteController.text = POS.templatePartnerName ?? '';
+        selectedBPartnerID = partnerId;
+        clienteController.text = cachedPartner['name']?.toString() ?? POS.templatePartnerName ?? '';
+        bpartnerPriceListID = priceListID;
         hasLocationBPartner = hasLocation;
       });
       _validateForm();
     }
+  }
+
+  Future<void> _initializeBPartners() async {
+    await _loadBPartner(showLoadingIndicator: true, searchTerm: '');
+    if (!mounted || widget.heldTicket != null) return;
+    await _initialPartner();
   }
 
   Future<void> _loadPayment() async {
@@ -466,6 +489,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
   @override
   void dispose() {
     ProductRepository.instance.removeListener(_onProductRepositoryChanged);
+    BPartnerRepository.instance.removeListener(_onBPartnerRepositoryChanged);
     if (identical(HeldTicketStore.instance.activeOrderSaver, _activeOrderSaver)) {
       HeldTicketStore.instance.activeOrderSaver = null;
       HeldTicketStore.instance.activeTicketId = null;
@@ -475,6 +499,18 @@ class _OrderNewPageState extends State<OrderNewPage> {
     }
 
     super.dispose();
+  }
+
+  Future<void> _onBPartnerRepositoryChanged() async {
+    final partners = await BPartnerRepository.instance.readCached(searchTerm: _bPartnerOptionsSearchTerm);
+    if (!mounted) return;
+    setState(() {
+      bPartnerOptions = partners;
+      if (selectedBPartnerID != null) {
+        final selected = partners.firstWhere((item) => item['id'] == selectedBPartnerID, orElse: () => const <String, dynamic>{});
+        if (selected.isNotEmpty) hasLocationBPartner = selected['hasLocation'] == true;
+      }
+    });
   }
 
   Future<void> _onProductRepositoryChanged() async {
@@ -901,7 +937,9 @@ class _OrderNewPageState extends State<OrderNewPage> {
     return true;
   }
 
-  Future<void> _loadBPartner({bool showLoadingIndicator = false}) async {
+  Future<void> _loadBPartner({bool showLoadingIndicator = false, String? searchTerm}) async {
+    final effectiveSearchTerm = searchTerm ?? clienteController.text.trim();
+    _bPartnerOptionsSearchTerm = effectiveSearchTerm;
     if (showLoadingIndicator) {
       setState(() {
         isCustomerSearchLoading = true;
@@ -910,8 +948,9 @@ class _OrderNewPageState extends State<OrderNewPage> {
       });
     }
 
-    final partner = await fetchBPartner(context: context, searchTerm: clienteController.text.trim());
+    final partner = await fetchBPartner(context: context, searchTerm: effectiveSearchTerm);
 
+    if (!mounted) return;
     setState(() {
       bPartnerOptions = partner;
       isCustomerSearchLoading = false;
@@ -919,8 +958,8 @@ class _OrderNewPageState extends State<OrderNewPage> {
         canShowCreateCustomerButton = false;
         createAnchorCustomerTerm = null;
       } else {
-        canShowCreateCustomerButton = clienteController.text.trim().isNotEmpty;
-        createAnchorCustomerTerm = canShowCreateCustomerButton ? clienteController.text.trim() : null;
+        canShowCreateCustomerButton = effectiveSearchTerm.isNotEmpty;
+        createAnchorCustomerTerm = canShowCreateCustomerButton ? effectiveSearchTerm : null;
       }
     });
     if (mounted && firtsLoad) {
@@ -999,6 +1038,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
       priceListID: bpartnerPriceListID,
       initialSearch: productController.text.trim(),
       initialCategoryIDs: selectedCategories,
+      initialOrderLines: invoiceLines,
       onCategoriesChanged: (categories) {
         if (mounted) {
           setState(() => selectedCategories = categories);
@@ -1009,13 +1049,38 @@ class _OrderNewPageState extends State<OrderNewPage> {
     if (selection != null) {
       setState(() => selectedCategories = {...selection.categoryIDs});
       final selectedProducts = selection.products;
-      if (selectedProducts.isEmpty) return;
       if (POS.cPosID != null) {
         if (!await _resetPaymentsForProductChange()) return;
       }
       final addedLines = <Map<String, dynamic>>[];
       setState(() {
+        final existingProductIDs = <int>{};
+        for (var index = invoiceLines.length - 1; index >= 0; index--) {
+          final line = invoiceLines[index];
+          final rawID = line['id'] ?? line['M_Product_ID'];
+          final int? productID = rawID is Map
+              ? int.tryParse(rawID['id']?.toString() ?? '')
+              : rawID is int
+              ? rawID
+              : int.tryParse(rawID?.toString() ?? '');
+          if (productID == null || !selection.quantities.containsKey(productID)) {
+            continue;
+          }
+          final quantity = selection.quantities[productID] ?? 0;
+          if (quantity <= 0 || existingProductIDs.contains(productID)) {
+            invoiceLines.removeAt(index);
+          } else {
+            line['quantity'] = quantity;
+            existingProductIDs.add(productID);
+          }
+        }
         for (final item in selectedProducts) {
+          final int? productID = item['id'] as int?;
+          if (productID == null || existingProductIDs.contains(productID)) {
+            continue;
+          }
+          final quantity = selection.quantities[productID] ?? 0;
+          if (quantity <= 0) continue;
           final int? selectedTaxID = (item['C_Tax_ID'] ?? item['tax']?['id'] ?? selectedTax?['id']) as int?;
           final double priceActual = _r2((item['price'] ?? item['Price'] ?? 0).toDouble());
           final double priceList = _r2((item['PriceList'] ?? item['priceList'] ?? item['price'] ?? 0).toDouble());
@@ -1023,7 +1088,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
 
           final line = <String, dynamic>{
             ...item,
-            'quantity': 1,
+            'quantity': quantity,
             'price': priceActual,
             'C_Tax_ID': selectedTaxID,
             'Description': item['Description'] ?? '',
@@ -1033,6 +1098,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
             'priceSyncState': item['fromCache'] == true ? 'pending' : 'valid',
           };
           invoiceLines.add(line);
+          existingProductIDs.add(productID);
           addedLines.add(line);
         }
       });
@@ -1595,21 +1661,23 @@ class _OrderNewPageState extends State<OrderNewPage> {
   }
 
   Future<void> _createInvoice({required List<Map<String, dynamic>> product, required int bPartner}) async {
-    if (!await _ensurePricesValid()) return;
-    if (widget.isRefund && widget.sourceOrderId != null) {
-      try {
-        final alreadyReturned = await hasActiveReturnForOrder(orderId: widget.sourceOrderId!);
-        if (alreadyReturned) {
-          if (!mounted) return;
-          ToastMessage.show(context: context, message: AppLocale.returnAlreadyExists.getString(context), type: ToastType.warning);
-          return;
-        }
-      } catch (_) {
-        if (!mounted) return;
-        ToastMessage.show(context: context, message: AppLocale.returnValidationError.getString(context), type: ToastType.failure);
-        return;
+    if (isSending || !mounted) return;
+
+    setState(() => isSending = true);
+    try {
+      await _createInvoiceOnce(product: product, bPartner: bPartner);
+    } finally {
+      if (mounted) {
+        setState(() => isSending = false);
+      } else {
+        isSending = false;
       }
     }
+  }
+
+  Future<void> _createInvoiceOnce({required List<Map<String, dynamic>> product, required int bPartner}) async {
+    if (!await _ensurePricesValid()) return;
+    if (!mounted) return;
     final String actionLabel = (() {
       try {
         final match = POS.documentActions.firstWhere(
@@ -1622,7 +1690,8 @@ class _OrderNewPageState extends State<OrderNewPage> {
       }
     })();
 
-    final confirm = await showDialog(
+    if (!mounted) return;
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -1645,7 +1714,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
       },
     );
 
-    if (confirm != true) return;
+    if (!mounted || confirm != true) return;
 
     if (widget.isRefund && widget.sourceOrderId != null) {
       try {
@@ -1661,7 +1730,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
       }
     }
 
-    setState(() => isSending = true);
+    if (!mounted) return;
     final List<Map<String, dynamic>> invoiceLine = product.map((item) {
       final double price = _r2(item['price'] ?? 0);
       final double priceList = _r2(item['PriceList'] ?? item['priceList'] ?? item['price'] ?? 0);
@@ -1735,9 +1804,17 @@ class _OrderNewPageState extends State<OrderNewPage> {
       sourceOrderId: widget.sourceOrderId,
     );
 
+    if (!mounted) return;
     if (result['success'] == true) {
-      if (_resumedTicketId != null) {
+      if (widget.isRefund && widget.sourceOrderId != null) {
+        await HeldTicketStore.instance.deleteRefundsForSourceOrder(widget.sourceOrderId!);
+        if (!mounted) return;
+        _resumedTicketId = null;
+        _resumedTicketCreatedAt = null;
+        HeldTicketStore.instance.activeTicketId = null;
+      } else if (_resumedTicketId != null) {
         await HeldTicketStore.instance.delete(_resumedTicketId!);
+        if (!mounted) return;
         _resumedTicketId = null;
         _resumedTicketCreatedAt = null;
         HeldTicketStore.instance.activeTicketId = null;
@@ -1755,13 +1832,16 @@ class _OrderNewPageState extends State<OrderNewPage> {
             actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(AppLocale.close.getString(context)))],
           ),
         );
+        if (!mounted) return;
       }
 
       final Map<String, dynamic>? order = await fetchOrderById(orderId: int.parse(result['Record_ID'].toString()), context: context);
 
+      if (!mounted) return;
       if (order != null) {
         if (POS.isPOS == true) {
           final confirmPrintTicket = await _printTicketConfirmation(context);
+          if (!mounted) return;
           if (confirmPrintTicket == true) {
             try {
               final pdfBytes = await generatePOSTicket(order);
@@ -1789,9 +1869,10 @@ class _OrderNewPageState extends State<OrderNewPage> {
               } catch (_) {}
             }
           }
-        } else {
+        } else if (!widget.isRefund) {
           //? Mostrar detalle de la orden [NO Es POS]
           await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderDetailPage(order: order)));
+          if (!mounted) return;
         }
       }
       ToastMessage.show(
@@ -1799,6 +1880,11 @@ class _OrderNewPageState extends State<OrderNewPage> {
         message: widget.isRefund ? AppLocale.creditNote.getString(context) : AppLocale.newOrder.getString(context),
         type: ToastType.success,
       );
+
+      if (widget.isRefund && widget.sourceOrderId != null) {
+        Navigator.pop(context, true);
+        return;
+      }
 
       clearInvoiceFields();
       _loadSequence();
@@ -1820,7 +1906,6 @@ class _OrderNewPageState extends State<OrderNewPage> {
         type: ToastType.failure,
       );
     }
-    setState(() => isSending = false);
   }
 
   Map<String, double> getGroupedTaxTotals() {
@@ -1856,8 +1941,8 @@ class _OrderNewPageState extends State<OrderNewPage> {
 
     return WillPopScope(
       onWillPop: () async {
-        //TODO manejar lo de cancelar el yappy si me salgo
-
+        if (isSending) return false;
+        await _autoPutOnHold();
         return true;
       },
       child: Scaffold(
@@ -2303,92 +2388,16 @@ class _OrderNewPageState extends State<OrderNewPage> {
                                               icon: const Icon(Icons.category),
                                               label: Text(AppLocale.categories.getString(context)),
                                               onPressed: () async {
-                                                Set<int> tempSelected = Set<int>.from(selectedCategories);
-                                                await showModalBottomSheet(
+                                                final result = await showCategoryFilterSheet(
                                                   context: context,
-                                                  isScrollControlled: true,
-                                                  builder: (context) {
-                                                    return StatefulBuilder(
-                                                      builder: (context, setModalState) {
-                                                        return SafeArea(
-                                                          child: Padding(
-                                                            padding: MediaQuery.of(context).viewInsets,
-                                                            child: Container(
-                                                              constraints: const BoxConstraints(maxHeight: 400),
-                                                              child: Column(
-                                                                mainAxisSize: MainAxisSize.min,
-                                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                                children: [
-                                                                  Padding(
-                                                                    padding: const EdgeInsets.all(16.0),
-                                                                    child: Text(
-                                                                      AppLocale.selectCategories.getString(context),
-                                                                      style: Theme.of(context).textTheme.bodyLarge,
-                                                                    ),
-                                                                  ),
-                                                                  Expanded(
-                                                                    child: ListView.builder(
-                                                                      shrinkWrap: true,
-                                                                      itemCount: categpryOptions.length,
-                                                                      itemBuilder: (context, idx) {
-                                                                        final cat = categpryOptions[idx];
-                                                                        final isSelected = tempSelected.contains(cat['id']);
-                                                                        return ListTile(
-                                                                          title: Text(cat['name']),
-                                                                          selected: isSelected,
-                                                                          onTap: () {
-                                                                            setModalState(() {
-                                                                              if (isSelected) {
-                                                                                tempSelected.remove(cat['id']);
-                                                                              } else {
-                                                                                tempSelected.add(cat['id']);
-                                                                              }
-                                                                            });
-                                                                          },
-                                                                          trailing: isSelected
-                                                                              ? const Icon(Icons.check, color: Colors.blue)
-                                                                              : null,
-                                                                        );
-                                                                      },
-                                                                    ),
-                                                                  ),
-                                                                  Padding(
-                                                                    padding: const EdgeInsets.all(16.0),
-                                                                    child: Row(
-                                                                      mainAxisAlignment: MainAxisAlignment.end,
-                                                                      children: [
-                                                                        TextButton(
-                                                                          onPressed: () {
-                                                                            Navigator.pop(context);
-                                                                          },
-                                                                          child: Text(AppLocale.cancel.getString(context)),
-                                                                        ),
-                                                                        const SizedBox(width: 8),
-                                                                        ElevatedButton(
-                                                                          onPressed: () {
-                                                                            Navigator.pop(context, tempSelected);
-                                                                          },
-                                                                          child: Text(AppLocale.apply.getString(context)),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        );
-                                                      },
-                                                    );
-                                                  },
-                                                ).then((result) {
-                                                  if (result != null && result is Set<int>) {
-                                                    setState(() {
-                                                      selectedCategories = Set<int>.from(result);
-                                                    });
-                                                    _loadProduct(showLoadingIndicator: true, requestFieldFocus: false);
-                                                  }
-                                                });
+                                                  categories: categpryOptions,
+                                                  selectedCategoryIDs: selectedCategories,
+                                                );
+                                                if (!mounted || result == null) {
+                                                  return;
+                                                }
+                                                setState(() => selectedCategories = result);
+                                                _loadProduct(showLoadingIndicator: true, requestFieldFocus: false);
                                               },
                                             ),
                                             Material(

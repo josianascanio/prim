@@ -13,6 +13,9 @@ import 'package:protocol_handler/protocol_handler.dart';
 import 'dart:async';
 import 'views/Home/product/product_repository.dart';
 import 'views/Home/product/product_sync_overlay.dart';
+import 'views/Home/order/order_history_repository.dart';
+import 'views/Home/bpartner/bpartner_repository.dart';
+import 'views/Home/bpartner/bpartner_sync_overlay.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -26,13 +29,17 @@ Future<void> main() async {
   HttpOverrides.global = MyHttpOverrides();
   await FlutterLocalization.instance.ensureInitialized();
   await ProductRepository.instance.initialize();
+  await OrderHistoryRepository.instance.initialize();
+  await BPartnerRepository.instance.initialize();
   runApp(const MainApp());
 }
 
 class MyHttpOverrides extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
-    return super.createHttpClient(context)..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+    return super.createHttpClient(context)
+      ..badCertificateCallback =
+          (X509Certificate cert, String host, int port) => true;
   }
 }
 
@@ -68,7 +75,13 @@ class _MainAppState extends State<MainApp> {
     ThemeManager.themeNotifier = this;
     _loadThemePreference();
 
-    _localization.init(mapLocales: [const MapLocale('en', AppLocale.en), const MapLocale('es', AppLocale.es)], initLanguageCode: 'es');
+    _localization.init(
+      mapLocales: [
+        const MapLocale('en', AppLocale.en),
+        const MapLocale('es', AppLocale.es),
+      ],
+      initLanguageCode: 'es',
+    );
     _localization.onTranslatedLanguage = _onLanguageChanged;
 
     _initDeepLinks();
@@ -100,7 +113,10 @@ class _MainAppState extends State<MainApp> {
 
   void _handleDeepLink(Uri uri) {
     if (uri.scheme == 'primware' && uri.host == 'login') {
-      navigatorKey.currentState?.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginPage()), (route) => false);
+      navigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
     }
   }
 
@@ -132,7 +148,13 @@ class _MainAppState extends State<MainApp> {
       localizationsDelegates: _localization.localizationsDelegates,
       locale: _localization.currentLocale,
       home: const LoginPage(),
-      builder: (context, child) => Stack(children: [if (child != null) child, const ProductSyncOverlay()]),
+      builder: (context, child) => Stack(
+        children: [
+          if (child != null) child,
+          const ProductSyncOverlay(),
+          const BPartnerSyncOverlay(),
+        ],
+      ),
     );
   }
 }

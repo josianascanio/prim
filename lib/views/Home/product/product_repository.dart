@@ -716,14 +716,19 @@ class ProductRepository extends ChangeNotifier {
       );
     }
     if (persistPage) {
-      await _box?.put(_pageStorageKey(key), {
+      final storageKey = _pageStorageKey(key);
+      final existing = _box?.get(storageKey);
+      final timestampKey = existing is Map && existing.containsKey('updatedAt') ? 'updatedAt' : 'cachedAt';
+      final cachedAt = existing is Map ? existing[timestampKey] ?? DateTime.now().toIso8601String() : DateTime.now().toIso8601String();
+      final value = {
         'schema': _schemaVersion,
         'ids': page.records.map((item) => item['id']).whereType<int>().toList(),
         'rowCount': page.rowCount,
         'pageIndex': page.pageIndex,
         'catalogScope': catalogScope,
-        'updatedAt': DateTime.now().toIso8601String(),
-      });
+        timestampKey: cachedAt,
+      };
+      if (!_sameStoredValue(existing, value)) await _box?.put(storageKey, value);
     }
   }
 
@@ -735,25 +740,30 @@ class ProductRepository extends ChangeNotifier {
   }) async {
     final id = product['id'];
     if (id is! int) return;
-    await _box?.put(
-      _productStorageKey(
+    final storageKey = _productStorageKey(
         id,
         versionID,
         catalogScope: catalogScope,
         warehouseID: warehouseID,
-      ),
-      {
+      );
+    final existing = _box?.get(storageKey);
+    final timestampKey = existing is Map && existing.containsKey('lastAccessedAt') ? 'lastAccessedAt' : 'cachedAt';
+    final cachedAt = existing is Map ? existing[timestampKey] ?? DateTime.now().toIso8601String() : DateTime.now().toIso8601String();
+    final value = {
         ...product,
         'tax': product['tax'] is Map
             ? Map<String, dynamic>.from(product['tax'] as Map)
             : product['tax'],
         'fromCache': false,
         'stockLoading': false,
-        'lastAccessedAt': DateTime.now().toIso8601String(),
+        timestampKey: cachedAt,
         'schema': _schemaVersion,
-      },
-    );
+      };
+    if (!_sameStoredValue(existing, value)) await _box?.put(storageKey, value);
   }
+
+  bool _sameStoredValue(dynamic current, Map<String, dynamic> next) =>
+      current is Map && jsonEncode(current) == jsonEncode(next);
 
   void _replaceProductInMemory(Map<String, dynamic> product) {
     final id = product['id'];
@@ -824,7 +834,7 @@ class ProductRepository extends ChangeNotifier {
       final value = _box!.get(key);
       if (value is! Map) continue;
       final date = DateTime.tryParse(
-        (value['lastAccessedAt'] ?? value['updatedAt'] ?? '').toString(),
+        (value['cachedAt'] ?? value['lastAccessedAt'] ?? value['updatedAt'] ?? '').toString(),
       );
       if (date != null && date.isBefore(cutoff)) stale.add(key);
     }

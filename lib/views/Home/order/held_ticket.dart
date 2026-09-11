@@ -98,6 +98,16 @@ class HeldTicketStore {
     await _write(tickets);
   }
 
+  Future<void> deleteRefundsForSourceOrder(int sourceOrderId) async {
+    final tickets = await load()
+      ..removeWhere((item) {
+        final data = item.data;
+        final ticketSourceOrderId = int.tryParse(data['sourceOrderId']?.toString() ?? '');
+        return data['isRefund'] == true && ticketSourceOrderId == sourceOrderId;
+      });
+    await _write(tickets);
+  }
+
   Future<void> refresh() async => load();
 
   Future<void> _write(List<HeldTicket> tickets) async {

@@ -26,6 +26,8 @@ class AppLocale {
   static const String noProductsFound = 'noProductsFound';
   static const String selectProducts = 'selectProducts';
   static const String selectedProductsCount = 'selectedProductsCount';
+  static const String selectedUnitsCount = 'selectedUnitsCount';
+  static const String decreaseQuantity = 'decreaseQuantity';
   static const String addToOrder = 'addToOrder';
   static const String favorites = 'favorites';
   static const String noCategories = 'noCategories';
@@ -310,6 +312,19 @@ class AppLocale {
   static const String clearProductCacheTitle = 'clearProductCacheTitle';
   static const String clearProductCacheMessage = 'clearProductCacheMessage';
   static const String productCacheCleared = 'productCacheCleared';
+  static const String orderCacheSize = 'orderCacheSize';
+  static const String clearOrderCache = 'clearOrderCache';
+  static const String clearOrderCacheTitle = 'clearOrderCacheTitle';
+  static const String clearOrderCacheMessage = 'clearOrderCacheMessage';
+  static const String orderCacheCleared = 'orderCacheCleared';
+  static const String customerCacheSize = 'customerCacheSize';
+  static const String clearCustomerCache = 'clearCustomerCache';
+  static const String clearCustomerCacheTitle = 'clearCustomerCacheTitle';
+  static const String clearCustomerCacheMessage = 'clearCustomerCacheMessage';
+  static const String customerCacheCleared = 'customerCacheCleared';
+  static const String syncCustomers = 'syncCustomers';
+  static const String syncingCustomers = 'syncingCustomers';
+  static const String customerSyncError = 'customerSyncError';
   static const String systemLogs = 'systemLogs';
   static const String notApplicable = 'notApplicable';
   static const String enabled = 'enabled';
@@ -604,6 +619,21 @@ class AppLocale {
     clearProductCacheMessage:
         'All locally synchronized product data will be deleted from this device. This action cannot be undone.',
     productCacheCleared: 'The product cache was cleared.',
+    orderCacheSize: 'Order cache (order_history_cache_v1)',
+    clearOrderCache: 'Clear order cache',
+    clearOrderCacheTitle: 'Clear order cache?',
+    clearOrderCacheMessage:
+        'All locally cached orders and payment receipts will be deleted from this device. This action cannot be undone.',
+    orderCacheCleared: 'The order cache was cleared.',
+    customerCacheSize: 'Customer cache (bpartner_cache_v1)',
+    clearCustomerCache: 'Clear customer cache',
+    clearCustomerCacheTitle: 'Clear customer cache?',
+    clearCustomerCacheMessage:
+        'All locally synchronized customer data will be deleted from this device. This action cannot be undone.',
+    customerCacheCleared: 'The customer cache was cleared.',
+    syncCustomers: 'Sync customers',
+    syncingCustomers: 'Syncing customers',
+    customerSyncError: 'Some customers could not be synchronized.',
     systemLogs: 'System logs',
     notApplicable: 'Not applicable',
     enabled: 'Enabled',
@@ -683,6 +713,8 @@ class AppLocale {
     noProductsFound: 'No products found.',
     selectProducts: 'Select products',
     selectedProductsCount: '{count} selected',
+    selectedUnitsCount: '{count} units selected',
+    decreaseQuantity: 'Decrease quantity',
     addToOrder: 'Add to order',
     favorites: 'Favorites',
     noCategories: 'No categories',
@@ -1071,6 +1103,21 @@ class AppLocale {
     clearProductCacheMessage:
         'Se eliminarán de este dispositivo todos los productos sincronizados localmente. Esta acción no se puede deshacer.',
     productCacheCleared: 'El caché de productos fue eliminado.',
+    orderCacheSize: 'Caché de órdenes (order_history_cache_v1)',
+    clearOrderCache: 'Eliminar caché de órdenes',
+    clearOrderCacheTitle: '¿Eliminar el caché de órdenes?',
+    clearOrderCacheMessage:
+        'Se eliminarán de este dispositivo todas las órdenes y recibos de pago guardados localmente. Esta acción no se puede deshacer.',
+    orderCacheCleared: 'El caché de órdenes fue eliminado.',
+    customerCacheSize: 'Caché de clientes (bpartner_cache_v1)',
+    clearCustomerCache: 'Eliminar caché de clientes',
+    clearCustomerCacheTitle: '¿Eliminar el caché de clientes?',
+    clearCustomerCacheMessage:
+        'Se eliminarán de este dispositivo todos los clientes sincronizados localmente. Esta acción no se puede deshacer.',
+    customerCacheCleared: 'El caché de clientes fue eliminado.',
+    syncCustomers: 'Sincronizar clientes',
+    syncingCustomers: 'Sincronizando clientes',
+    customerSyncError: 'No se pudieron sincronizar algunos clientes.',
     systemLogs: 'Logs del sistema',
     notApplicable: 'No aplica',
     enabled: 'Habilitado',
@@ -1140,6 +1187,8 @@ class AppLocale {
     noProductsFound: 'No se encontraron productos.',
     selectProducts: 'Selección de productos',
     selectedProductsCount: '{count} seleccionados',
+    selectedUnitsCount: '{count} unidades seleccionadas',
+    decreaseQuantity: 'Disminuir cantidad',
     addToOrder: 'Añadir a la orden',
     favorites: 'Favoritos',
     noCategories: 'No hay categorías',
