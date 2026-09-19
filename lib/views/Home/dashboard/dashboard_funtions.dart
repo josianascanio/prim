@@ -196,7 +196,6 @@ Future<Map<String, double>> fetchSalesYTDBySalesRepCurrentMonth({
         headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
       );
 
-      debugPrint('Respuesta del servidor (status ${response.statusCode}): ${response.body}');
       if (response.statusCode != 200) {
         debugPrint('Error al obtener datos del gráfico Sales YTD By SalesRep (status ${response.statusCode}): ${response.body}');
         return {};
