@@ -1,5 +1,4 @@
 // main.dart
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -22,9 +21,6 @@ import 'package:upgrader/upgrader.dart';
 import 'shared/custom_upgrade_alert.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
-// ─── Estado global del tema ──────────────────────────────────────────────────
-// Una ValueNotifier simple para manejar el tema sin paquetes externos.
 final ValueNotifier<ThemeData> appThemeNotifier = ValueNotifier(AppThemes.lightTheme);
 
 Future<void> main() async {
@@ -39,22 +35,20 @@ Future<void> main() async {
   await ProductRepository.instance.initialize();
   await OrderHistoryRepository.instance.initialize();
   await BPartnerRepository.instance.initialize();
-  
+
   await UserData.loadFromCache();
-  
+
   final prefs = await SharedPreferences.getInstance();
   final isDarkMode = prefs.getBool('isDarkMode') ?? false;
   appThemeNotifier.value = isDarkMode ? AppThemes.darkTheme : AppThemes.lightTheme;
-  
+
   runApp(MainApp(initialIsDarkMode: isDarkMode));
 }
 
 class MyHttpOverrides extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
-    return super.createHttpClient(context)
-      ..badCertificateCallback =
-          (X509Certificate cert, String host, int port) => true;
+    return super.createHttpClient(context)..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
   }
 }
 
@@ -76,13 +70,7 @@ class _MainAppState extends State<MainApp> {
   void initState() {
     super.initState();
 
-    _localization.init(
-      mapLocales: [
-        const MapLocale('en', AppLocale.en),
-        const MapLocale('es', AppLocale.es),
-      ],
-      initLanguageCode: 'es',
-    );
+    _localization.init(mapLocales: [const MapLocale('en', AppLocale.en), const MapLocale('es', AppLocale.es)], initLanguageCode: 'es');
     _localization.onTranslatedLanguage = _onLanguageChanged;
 
     // Escuchamos el notifier de tema para actualizar el MaterialApp
@@ -120,10 +108,7 @@ class _MainAppState extends State<MainApp> {
 
   void _handleDeepLink(Uri uri) {
     if (uri.scheme == 'primware' && uri.host == 'login') {
-      navigatorKey.currentState?.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-        (route) => false,
-      );
+      navigatorKey.currentState?.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginPage()), (route) => false);
     }
   }
 
@@ -145,8 +130,6 @@ class _MainAppState extends State<MainApp> {
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         title: Base.title,
-        // Leemos el tema directamente del notifier; al cambiar solo se
-        // actualiza esta propiedad, el Navigator no se reinicia.
         theme: appThemeNotifier.value,
         supportedLocales: _localization.supportedLocales,
         localizationsDelegates: _localization.localizationsDelegates,
@@ -154,16 +137,8 @@ class _MainAppState extends State<MainApp> {
         home: const LoginPage(),
         builder: (context, child) => CustomUpgradeAlert(
           navigatorKey: navigatorKey,
-          upgrader: Upgrader(
-            languageCode: _localization.currentLocale?.languageCode ?? 'es',
-          ),
-          child: Stack(
-            children: [
-              if (child != null) child,
-              const ProductSyncOverlay(),
-              const BPartnerSyncOverlay(),
-            ],
-          ),
+          upgrader: Upgrader(languageCode: _localization.currentLocale?.languageCode ?? 'es'),
+          child: Stack(children: [if (child != null) child, const ProductSyncOverlay(), const BPartnerSyncOverlay()]),
         ),
       ),
     );

@@ -130,7 +130,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 ? Padding(
                     padding: const EdgeInsets.only(right: CustomSpacer.medium),
                     child: Container(
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(CustomSpacer.medium), color: Colors.white),
+                      decoration: Theme.of(context).brightness == Brightness.dark
+                          ? null
+                          : BoxDecoration(borderRadius: BorderRadius.circular(CustomSpacer.medium), color: Colors.white),
                       padding: const EdgeInsets.all(CustomSpacer.small),
                       child: const Logo(width: 60),
                     ),
