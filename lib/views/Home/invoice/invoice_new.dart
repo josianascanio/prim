@@ -176,13 +176,30 @@ class _InvoicePaymentPageState extends State<InvoicePaymentPage> {
 
   Future<void> _loadCustomers() async {
     if (!mounted) return;
+    final searchTerm = _customerController.text.trim();
     setState(() => _loadingCustomers = true);
-    final result = await fetchBPartner(context: context, searchTerm: _customerController.text.trim());
+    final result = await fetchBPartner(context: context, searchTerm: searchTerm);
     if (!mounted) return;
     setState(() {
       _customers = result;
       _loadingCustomers = false;
     });
+    if (searchTerm.isNotEmpty && result.length == 1) {
+      FocusScope.of(context).unfocus();
+      await _selectCustomer(result.single);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _searchCustomers(String query) async {
+    if (!mounted) return [];
+    setState(() => _loadingCustomers = true);
+    final result = await fetchBPartner(context: context, searchTerm: query.trim());
+    if (!mounted) return result;
+    setState(() {
+      _customers = result;
+      _loadingCustomers = false;
+    });
+    return result;
   }
 
   Future<void> _loadPaymentMethods() async {
@@ -434,6 +451,7 @@ class _InvoicePaymentPageState extends State<InvoicePaymentPage> {
                   searchBy: 'TaxID',
                   searchByText: 'Cédula',
                   enabled: !_processingPayments,
+                  onSearch: _searchCustomers,
                   onSubmit: (_) => _loadCustomers(),
                   onItemSelected: _selectCustomer,
                   onChanged: (value) {
@@ -521,8 +539,9 @@ class _InvoicePaymentPageState extends State<InvoicePaymentPage> {
   }
 
   Widget _buildPaymentMethods() {
+    final mobile = MediaQuery.sizeOf(context).width < 700;
     return CustomContainer(
-      maxWidthContainer: 320,
+      maxWidthContainer: mobile ? 360 : 320,
       margin: const EdgeInsets.only(top: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
