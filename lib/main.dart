@@ -1,5 +1,5 @@
-// main.dart
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:primware/views/Auth/login_view.dart';
@@ -26,11 +26,13 @@ final ValueNotifier<ThemeData> appThemeNotifier = ValueNotifier(AppThemes.lightT
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (Platform.isWindows || Platform.isMacOS) {
-    await protocolHandler.register('primware');
+  if (!kIsWeb) {
+    if (Platform.isWindows || Platform.isMacOS) {
+      await protocolHandler.register('primware');
+    }
+    HttpOverrides.global = MyHttpOverrides();
   }
 
-  HttpOverrides.global = MyHttpOverrides();
   await FlutterLocalization.instance.ensureInitialized();
   await ProductRepository.instance.initialize();
   await OrderHistoryRepository.instance.initialize();
