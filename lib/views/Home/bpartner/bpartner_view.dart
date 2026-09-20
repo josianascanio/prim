@@ -227,14 +227,20 @@ class _BPartnerListPageState extends State<BPartnerListPage> {
                           onPressed: () => _loadBPartner(showLoadingIndicator: true),
                         ),
                         const SizedBox(width: CustomSpacer.small),
-                        AnimatedActionButton(
-                          icon: Icons.sync,
-                          tooltip: AppLocale.syncCustomers.getString(context),
-                          backgroundColor: Colors.green.withOpacity(0.8),
-                          iconColor: Colors.white,
-                          onPressed: BPartnerSyncController.instance.isRunning
-                              ? null
-                              : () => BPartnerSyncController.instance.start(context: context),
+                        AnimatedBuilder(
+                          animation: BPartnerSyncController.instance,
+                          builder: (context, _) {
+                            return AnimatedActionButton(
+                              icon: Icons.sync,
+                              tooltip: AppLocale.syncCustomers.getString(context),
+                              backgroundColor: Colors.green.withOpacity(0.8),
+                              iconColor: Colors.white,
+                              isSpinning: BPartnerSyncController.instance.isRunning,
+                              onPressed: BPartnerSyncController.instance.isRunning
+                                  ? null
+                                  : () => BPartnerSyncController.instance.start(context: context),
+                            );
+                          },
                         ),
                       ],
                     ),

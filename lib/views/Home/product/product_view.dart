@@ -536,14 +536,20 @@ class _ProductListPageState extends State<ProductListPage> {
                           onPressed: () => _loadProduct(showLoadingIndicator: true),
                         ),
                         const SizedBox(width: CustomSpacer.small),
-                        AnimatedActionButton(
-                          icon: Icons.sync,
-                          tooltip: AppLocale.syncProducts.getString(context),
-                          backgroundColor: Colors.green.withOpacity(0.8),
-                          iconColor: Colors.white,
-                          onPressed: ProductSyncController.instance.isRunning
-                              ? null
-                              : () => ProductSyncController.instance.start(),
+                        AnimatedBuilder(
+                          animation: ProductSyncController.instance,
+                          builder: (context, _) {
+                            return AnimatedActionButton(
+                              icon: Icons.sync,
+                              tooltip: AppLocale.syncProducts.getString(context),
+                              backgroundColor: Colors.green.withOpacity(0.8),
+                              iconColor: Colors.white,
+                              isSpinning: ProductSyncController.instance.isRunning,
+                              onPressed: ProductSyncController.instance.isRunning
+                                  ? null
+                                  : () => ProductSyncController.instance.start(),
+                            );
+                          },
                         ),
                       ],
                     ),
