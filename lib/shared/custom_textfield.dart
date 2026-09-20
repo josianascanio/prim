@@ -18,8 +18,11 @@ class TextfieldTheme extends StatefulWidget {
     this.readOnly = false,
     this.colorEmpty = false,
     this.maxLength,
+    this.maxLines,
+    this.minLines,
     this.focusNode,
     this.textAlign,
+    this.fillColor,
   });
 
   final String? texto;
@@ -34,7 +37,10 @@ class TextfieldTheme extends StatefulWidget {
   List<TextInputFormatter>? inputFormatters;
 
   final int? maxLength;
+  final int? maxLines;
+  final int? minLines;
   final FocusNode? focusNode;
+  final Color? fillColor;
 
   @override
   State<TextfieldTheme> createState() => _TextfieldThemeState();
@@ -54,6 +60,13 @@ class _TextfieldThemeState extends State<TextfieldTheme> {
   Widget build(BuildContext context) {
     return TextField(
       maxLength: widget.maxLength,
+      minLines: widget.obscure ? 1 : (widget.minLines ?? 1),
+      maxLines: widget.obscure
+          ? 1
+          : (widget.maxLines == null &&
+                    widget.inputType == TextInputType.multiline
+                ? null
+                : (widget.maxLines ?? 5)),
       focusNode: widget.focusNode,
       onSubmitted: widget.onSubmitted,
       onChanged: widget.onChanged,
@@ -67,8 +80,11 @@ class _TextfieldThemeState extends State<TextfieldTheme> {
         counterText: '',
         hintText: widget.pista,
         hintStyle: TextStyle(color: Colors.grey),
-        filled: true, // Habilita el relleno del fondo
-        fillColor: Theme.of(context).cardColor,
+        filled: true,
+        fillColor: widget.fillColor ?? 
+            (Theme.of(context).brightness == Brightness.dark 
+                ? Colors.transparent 
+                : Theme.of(context).cardColor),
         hoverColor: Theme.of(context).primaryColor.withAlpha(40),
         focusedBorder: OutlineInputBorder(
           //Cuando estoy en el control
@@ -79,12 +95,15 @@ class _TextfieldThemeState extends State<TextfieldTheme> {
           borderRadius: const BorderRadius.all(Radius.circular(8)),
         ),
         enabledBorder: OutlineInputBorder(
-          //Cuando no estoy en el control
           borderSide: BorderSide(
             color: widget.colorEmpty
-                ? Theme.of(context).colorScheme.errorContainer
-                : Theme.of(context).primaryColor,
-          ), // Color del borde cuando no está enfocado
+                ? (Theme.of(context).brightness == Brightness.dark 
+                    ? Theme.of(context).colorScheme.error 
+                    : Theme.of(context).colorScheme.errorContainer)
+                : (Theme.of(context).brightness == Brightness.dark 
+                    ? Theme.of(context).dividerColor 
+                    : Theme.of(context).primaryColor),
+          ),
           borderRadius: const BorderRadius.all(Radius.circular(8)),
         ),
         border: const OutlineInputBorder(
@@ -163,7 +182,9 @@ class _TextFieldCommentsState extends State<TextFieldComments> {
         hintText: widget.pista,
         hintStyle: TextStyle(color: Theme.of(context).colorScheme.outline),
         filled: true,
-        fillColor: Theme.of(context).cardColor,
+        fillColor: Theme.of(context).brightness == Brightness.dark 
+            ? Colors.transparent 
+            : Theme.of(context).cardColor,
         hoverColor: Theme.of(context).colorScheme.primary.withAlpha(40),
         focusedBorder: OutlineInputBorder(
           //Cuando estoy en el control
@@ -174,12 +195,15 @@ class _TextFieldCommentsState extends State<TextFieldComments> {
           borderRadius: const BorderRadius.all(Radius.circular(8)),
         ),
         enabledBorder: OutlineInputBorder(
-          //Cuando no estoy en el control
           borderSide: BorderSide(
             color: widget.colorEmpty
-                ? Theme.of(context).colorScheme.errorContainer
-                : Theme.of(context).primaryColor,
-          ), // Color del borde cuando no está enfocado
+                ? (Theme.of(context).brightness == Brightness.dark 
+                    ? Theme.of(context).colorScheme.error 
+                    : Theme.of(context).colorScheme.errorContainer)
+                : (Theme.of(context).brightness == Brightness.dark 
+                    ? Theme.of(context).dividerColor 
+                    : Theme.of(context).primaryColor),
+          ),
           borderRadius: const BorderRadius.all(Radius.circular(8)),
         ),
         border: const OutlineInputBorder(

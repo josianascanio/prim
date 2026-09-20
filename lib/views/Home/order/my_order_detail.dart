@@ -8,12 +8,14 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:printing/printing.dart';
 import '../../../API/pos.api.dart';
 import '../../../localization/app_locale.dart';
+import '../../../shared/toast_message.dart';
+import '../../../shared/format_date.dart';
 import '../../../shared/footer.dart';
 import 'package:primware/views/Home/order/my_order_new.dart';
 import 'package:primware/views/Home/order/order_funtions.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import '../../../shared/toast_message.dart';
 import '../../../shared/doc_type_chip.dart';
+import 'order_line_helper.dart';
 
 class OrderDetailPage extends StatelessWidget {
   final Map<String, dynamic> order;
@@ -31,6 +33,12 @@ class OrderDetailPage extends StatelessWidget {
   };
 
   const OrderDetailPage({super.key, required this.order});
+
+  bool _isReturnOrder(Map<String, dynamic> value) {
+    final subtype = value['doctypetarget']?['subtype'];
+    final subtypeCode = subtype is Map ? subtype['id'] : subtype;
+    return subtypeCode?.toString() == 'RM' || value['doctypetarget']?['id'] == POS.docTypeRefundID;
+  }
 
   // Función para mostrar la confirmación de imprimir ticket
   Future<bool?> _printTicketConfirmation(BuildContext context) {
@@ -183,20 +191,16 @@ class OrderDetailPage extends StatelessWidget {
   }
 
   Widget _buildSubtypePill(BuildContext context, Map<String, dynamic> order) {
-    final sub = order['doctypetarget']?['subtype']?['id'];
-    final bool isReturn = (sub == 'RM') || (order['doctypetarget']?['id'] == POS.docTypeRefundID);
+    final bool isReturn = _isReturnOrder(order);
     final String? docName = order['doctypetarget']?['name'];
 
     return Padding(
       padding: const EdgeInsets.only(top: 6),
-      child: DocTypeChip(
-        docTypeName: docName,
-        isReturn: isReturn,
-      ),
+      child: DocTypeChip(docTypeName: docName, isReturn: isReturn),
     );
   }
 
-  Widget _buildCreditMemoPill() {
+  Widget _buildCreditMemoPill(BuildContext context) {
     const Color baseColor = Colors.red;
     final Color bgColor = baseColor.withOpacity(0.12);
 
@@ -213,8 +217,8 @@ class OrderDetailPage extends StatelessWidget {
         children: [
           Icon(Icons.receipt_long_outlined, size: 14, color: baseColor),
           const SizedBox(width: 6),
-          const Text(
-            'Nota de Crédito',
+          Text(
+            AppLocale.refundGenerated.getString(context),
             style: TextStyle(fontSize: 12, color: baseColor, fontWeight: FontWeight.w600),
           ),
         ],
@@ -254,30 +258,26 @@ class OrderDetailPage extends StatelessWidget {
     final int? orderId = (order['id'] as int?);
     final Future<Map<String, dynamic>?> feFuture = orderId != null ? fetchElectronicInvoiceInfo(orderId: orderId) : Future.value(null);
 
-    final dynamic subField = order['doctypetarget']?['subtype'];
-    final String? subId = (subField is Map) ? subField['id'] : subField;
-    final bool isReturn = subId == 'RM';
+    final bool isReturn = _isReturnOrder(order);
 
     // --- Validaciones de Estado y Nota de Crédito ---
     final bool isComplete = (order['DocStatus'] == 'CO');
     final List invoices = order['C_Invoice'] ?? [];
-    final bool hasCreditNote = invoices.any((inv) {
-      return inv['RelatedInvoice_ID'] != null;
-    });
+    final bool hasCreditNote = !isReturn && order['hasActiveReturn'] == true;
 
     // Obtener métodos de pago
     final List<dynamic> payments = (order['C_POSPayment'] ?? order['payments'] ?? []) as List<dynamic>;
 
     // Colores para el "Ticket"
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color ticketBgColor = isDark ? const Color(0xFF1E1E2C) : Colors.white;
-    final Color textColor = isDark ? Colors.grey.shade300 : Colors.black87;
+    final Color ticketBgColor = Colors.white;
+    final Color textColor = Colors.black87;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF0F2F5), // Fondo de la app (gris claro/oscuro)
       appBar: AppBar(
-        backgroundColor: (isReturn) ? Colors.red : Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
+        backgroundColor: (isReturn) ? Colors.red : (isDark ? null : Theme.of(context).primaryColor),
+        foregroundColor: isDark ? null : Colors.white,
         elevation: 0,
         title: Text('${order['doctypetarget']['name']} #${order['DocumentNo']}'),
         actions: [
@@ -294,14 +294,23 @@ class OrderDetailPage extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => OrderNewPage(isRefund: false, doctypeID: order['doctypetarget']?['id'] ?? POS.docTypeID, orderName: order['doctypetarget']?['name'] ?? POS.docTypeName, sourceOrderId: order['id']),
+                    builder: (_) => OrderNewPage(
+                      isRefund: false,
+                      doctypeID: order['doctypetarget']?['id'] ?? POS.docTypeID,
+                      orderName: order['doctypetarget']?['name'] ?? POS.docTypeName,
+                      sourceOrderId: order['id'],
+                    ),
                   ),
                 );
               }
 
               void actionConvert() {
                 if (POS.docTypesComplete.isEmpty) {
-                  ToastMessage.show(context: context, message: 'No hay tipos de documento disponibles para convertir.', type: ToastType.failure);
+                  ToastMessage.show(
+                    context: context,
+                    message: 'No hay tipos de documento disponibles para convertir.',
+                    type: ToastType.failure,
+                  );
                   return;
                 }
 
@@ -316,7 +325,10 @@ class OrderDetailPage extends StatelessWidget {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('Convertir documento a...', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                            Text(
+                              'Convertir documento a...',
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                            ),
                             const SizedBox(height: 8),
                             const Divider(),
                             ...POS.docTypesComplete.map((doc) {
@@ -325,7 +337,9 @@ class OrderDetailPage extends StatelessWidget {
                               final String docName = (doc['name'] ?? doc['Name'] ?? 'Documento').toString();
 
                               // Excluir notas de crédito (RM) y el MISMO tipo de documento actual
-                              if (doc['DocSubTypeSO'] == 'RM' || docTypeId == POS.docTypeRefundID || docTypeId == order['doctypetarget']?['id']) {
+                              if (doc['DocSubTypeSO'] == 'RM' ||
+                                  docTypeId == POS.docTypeRefundID ||
+                                  docTypeId == order['doctypetarget']?['id']) {
                                 return const SizedBox.shrink();
                               }
 
@@ -342,7 +356,12 @@ class OrderDetailPage extends StatelessWidget {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => OrderNewPage(isRefund: false, doctypeID: docTypeId, orderName: docName, sourceOrderId: order['id']),
+                                      builder: (_) => OrderNewPage(
+                                        isRefund: false,
+                                        doctypeID: docTypeId,
+                                        orderName: docName,
+                                        sourceOrderId: order['id'],
+                                      ),
                                     ),
                                   );
                                 },
@@ -357,20 +376,72 @@ class OrderDetailPage extends StatelessWidget {
               }
 
               void actionRefund() async {
+                if (orderId == null) return;
+                try {
+                  if (await hasActiveReturnForOrder(orderId: orderId, invoices: invoices)) {
+                    if (!context.mounted) return;
+                    ToastMessage.show(context: context, message: AppLocale.returnAlreadyExists.getString(context), type: ToastType.warning);
+                    Navigator.pop(context, true);
+                    return;
+                  }
+                } catch (_) {
+                  if (!context.mounted) return;
+                  ToastMessage.show(context: context, message: AppLocale.returnValidationError.getString(context), type: ToastType.failure);
+                  return;
+                }
                 final bool? confirm = await _refundConfirmation(context);
                 if (confirm == true) {
-                  Navigator.push(
+                  final completed = await Navigator.push<bool>(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => OrderNewPage(isRefund: true, doctypeID: POS.docTypeRefundID, orderName: POS.docTypeRefundName, sourceOrderId: order['id'] ?? order['C_Order_ID'] ?? order['record_id']),
+                      builder: (_) => OrderNewPage(
+                        isRefund: true,
+                        doctypeID: POS.docTypeRefundID,
+                        orderName: POS.docTypeRefundName,
+                        sourceOrderId: order['id'] ?? order['C_Order_ID'] ?? order['record_id'],
+                      ),
                     ),
                   );
+                  if (context.mounted && completed == true) Navigator.pop(context, true);
                 }
               }
 
               void actionArc() async {
+                if (orderId == null) return;
+                try {
+                  if (await hasActiveReturnForOrder(orderId: orderId, invoices: invoices)) {
+                    if (!context.mounted) return;
+                    ToastMessage.show(context: context, message: AppLocale.returnAlreadyExists.getString(context), type: ToastType.warning);
+                    Navigator.pop(context, true);
+                    return;
+                  }
+                } catch (_) {
+                  if (!context.mounted) return;
+                  ToastMessage.show(context: context, message: AppLocale.returnValidationError.getString(context), type: ToastType.failure);
+                  return;
+                }
                 final bool? confirm = await _creditMemoConfirmation(context);
                 if (confirm == true) {
+                  try {
+                    if (await hasActiveReturnForOrder(orderId: orderId, invoices: invoices)) {
+                      if (!context.mounted) return;
+                      ToastMessage.show(
+                        context: context,
+                        message: AppLocale.returnAlreadyExists.getString(context),
+                        type: ToastType.warning,
+                      );
+                      Navigator.pop(context, true);
+                      return;
+                    }
+                  } catch (_) {
+                    if (!context.mounted) return;
+                    ToastMessage.show(
+                      context: context,
+                      message: AppLocale.returnValidationError.getString(context),
+                      type: ToastType.failure,
+                    );
+                    return;
+                  }
                   final bool creditMemoSucces = await createCreditMemo(cInvoiceID: order['C_Invoice']?[0]?['id']);
                   if (creditMemoSucces) {
                     Navigator.pop(context, true);
@@ -385,8 +456,16 @@ class OrderDetailPage extends StatelessWidget {
                     final pdfBytes = POS.isPOS == true ? await generatePOSTicket(order) : await generateOrderTicket(order);
                     try {
                       final printers = await Printing.listPrinters();
-                      final defaultPrinter = printers.firstWhere((p) => p.isDefault, orElse: () => printers.isNotEmpty ? printers.first : throw Exception('No hay impresoras disponibles'));
-                      await Printing.directPrintPdf(printer: defaultPrinter, usePrinterSettings: true, dynamicLayout: true, onLayout: (_) => pdfBytes);
+                      final defaultPrinter = printers.firstWhere(
+                        (p) => p.isDefault,
+                        orElse: () => printers.isNotEmpty ? printers.first : throw Exception('No hay impresoras disponibles'),
+                      );
+                      await Printing.directPrintPdf(
+                        printer: defaultPrinter,
+                        usePrinterSettings: true,
+                        dynamicLayout: true,
+                        onLayout: (_) => pdfBytes,
+                      );
                     } catch (e) {
                       await Printing.sharePdf(bytes: pdfBytes, filename: 'Order_${order['DocumentNo']}.pdf');
                     }
@@ -405,12 +484,20 @@ class OrderDetailPage extends StatelessWidget {
                   final Map<String, dynamic> completeResult = await docComplete(cOrderID: order['id']);
                   if (completeResult['success'] == true && completeResult['isError'] != true) {
                     if (context.mounted) {
-                      ToastMessage.show(context: context, message: completeResult['summary'] ?? 'Orden completada con éxito', type: ToastType.success);
+                      ToastMessage.show(
+                        context: context,
+                        message: completeResult['summary'] ?? 'Orden completada con éxito',
+                        type: ToastType.success,
+                      );
                       Navigator.pop(context, true);
                     }
                   } else {
                     if (context.mounted) {
-                      ToastMessage.show(context: context, message: completeResult['summary'] ?? 'Error al completar la orden', type: ToastType.failure);
+                      ToastMessage.show(
+                        context: context,
+                        message: completeResult['summary'] ?? 'Error al completar la orden',
+                        type: ToastType.failure,
+                      );
                     }
                   }
                 }
@@ -505,7 +592,7 @@ class OrderDetailPage extends StatelessWidget {
                         );
                       }
 
-                      if (isReturn == false && POS.isPOS == true && !hasCreditNote) {
+                      if (isReturn == false && POS.isPOS == true && isComplete && !hasCreditNote && invoices.isNotEmpty) {
                         items.add(
                           PopupMenuItem<String>(
                             value: 'refund',
@@ -519,7 +606,7 @@ class OrderDetailPage extends StatelessWidget {
                           ),
                         );
                       }
-                      if (POS.isPOS == false && isComplete == true && !hasCreditNote && invoices.isNotEmpty) {
+                      if (isReturn == false && POS.isPOS == false && isComplete == true && !hasCreditNote && invoices.isNotEmpty) {
                         items.add(
                           PopupMenuItem<String>(
                             value: 'arc',
@@ -552,14 +639,14 @@ class OrderDetailPage extends StatelessWidget {
                         onPressed: actionComplete,
                       ),
 
-                    if (isReturn == false && POS.isPOS == true && !hasCreditNote)
+                    if (isReturn == false && POS.isPOS == true && isComplete && !hasCreditNote && invoices.isNotEmpty)
                       IconButton(
                         icon: const Icon(Icons.undo, color: Colors.redAccent),
                         tooltip: AppLocale.refund.getString(context),
                         onPressed: actionRefund,
                       ),
 
-                    if (POS.isPOS == false && isComplete == true && !hasCreditNote && invoices.isNotEmpty)
+                    if (isReturn == false && POS.isPOS == false && isComplete == true && !hasCreditNote && invoices.isNotEmpty)
                       IconButton(
                         icon: const Icon(Icons.receipt_long_outlined, color: Colors.redAccent),
                         tooltip: AppLocale.arc.getString(context),
@@ -568,7 +655,11 @@ class OrderDetailPage extends StatelessWidget {
 
                     Padding(
                       padding: const EdgeInsets.only(right: 8.0),
-                      child: IconButton(icon: const Icon(Icons.print_rounded), tooltip: AppLocale.printTicket.getString(context), onPressed: actionPrint),
+                      child: IconButton(
+                        icon: const Icon(Icons.print_rounded),
+                        tooltip: AppLocale.printTicket.getString(context),
+                        onPressed: actionPrint,
+                      ),
                     ),
                   ],
                 );
@@ -600,13 +691,17 @@ class OrderDetailPage extends StatelessWidget {
                     Center(
                       child: Column(
                         children: [
-                          if (POSPrinter.logo != null) ...[Image.memory(POSPrinter.logo!, height: 60, fit: BoxFit.contain), const SizedBox(height: 12)],
+                          if (POSPrinter.logo != null) ...[
+                            Image.memory(POSPrinter.logo!, height: 60, fit: BoxFit.contain),
+                            const SizedBox(height: 12),
+                          ],
                           Text(
                             POSPrinter.headerName ?? order['doctypetarget']['name'] ?? 'Documento',
                             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: textColor),
                             textAlign: TextAlign.center,
                           ),
-                          if (POSPrinter.headerTaxID != null) Text('RUC: ${POSPrinter.headerTaxID}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                          if (POSPrinter.headerTaxID != null)
+                            Text('RUC: ${POSPrinter.headerTaxID}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                           const SizedBox(height: 16),
                         ],
                       ),
@@ -632,7 +727,7 @@ class OrderDetailPage extends StatelessWidget {
                       ),
                       itemBuilder: (context, index) {
                         final line = lines[index];
-                        final String name = (line['M_Product_ID']?['identifier'] ?? '_${line['Description']}').split('_').skip(1).join(' ');
+                        final String name = orderLineDisplayName(line as Map);
                         final double qty = (line['QtyOrdered'] as num).toDouble();
                         final double price = (line['PriceActual'] as num).toDouble();
                         final double net = (line['LineNetAmt'] as num).toDouble();
@@ -641,7 +736,8 @@ class OrderDetailPage extends StatelessWidget {
                         final double total = net + tax;
 
                         final double priceList = (line['PriceList'] as num?)?.toDouble() ?? price;
-                        final double discountPct = (line['Discount'] as num?)?.toDouble() ?? ((priceList > 0) ? (1 - (price / priceList)) * 100 : 0.0);
+                        final double discountPct =
+                            (line['Discount'] as num?)?.toDouble() ?? ((priceList > 0) ? (1 - (price / priceList)) * 100 : 0.0);
 
                         return Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -656,7 +752,10 @@ class OrderDetailPage extends StatelessWidget {
                                     style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text("${qty.toStringAsFixed(qty % 1 == 0 ? 0 : 2)} x \$${price.toStringAsFixed(2)}", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                                  Text(
+                                    "${qty.toStringAsFixed(qty % 1 == 0 ? 0 : 2)} x \$${price.toStringAsFixed(2)}",
+                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                                  ),
                                   if (discountPct > 0.0)
                                     Text(
                                       "Desc: ${discountPct.toStringAsFixed(0)}%",
@@ -675,7 +774,10 @@ class OrderDetailPage extends StatelessWidget {
                                     style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text("${line['C_Tax_ID']['Name']} (${rate.toStringAsFixed(0)}%)", style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+                                  Text(
+                                    "${line['C_Tax_ID']['Name']} (${rate.toStringAsFixed(0)}%)",
+                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                                  ),
                                 ],
                               ),
                             ),
@@ -699,7 +801,9 @@ class OrderDetailPage extends StatelessWidget {
                     else
                       ...payments.map((p) {
                         final dynamic tenderField = p['C_POSTenderType_ID'];
-                        final String tenderName = (tenderField is Map) ? (tenderField['identifier'] ?? tenderField['name'] ?? '---').toString() : tenderField?.toString() ?? '---';
+                        final String tenderName = (tenderField is Map)
+                            ? (tenderField['identifier'] ?? tenderField['name'] ?? '---').toString()
+                            : tenderField?.toString() ?? '---';
                         final double payAmt = ((p['PayAmt'] ?? p['Amount'] ?? 0) as num).toDouble();
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -718,7 +822,12 @@ class OrderDetailPage extends StatelessWidget {
 
                     _buildDashedDivider(),
 
-                    _buildFinalSummary(taxSummary: taxSummary, grandTotal: (order['GrandTotal'] as num).toDouble(), context: context, textColor: textColor),
+                    _buildFinalSummary(
+                      taxSummary: taxSummary,
+                      grandTotal: (order['GrandTotal'] as num).toDouble(),
+                      context: context,
+                      textColor: textColor,
+                    ),
 
                     const SizedBox(height: 24),
                     Center(
@@ -743,7 +852,8 @@ class OrderDetailPage extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final meta = _docStatusMap[statusCode] ?? {'label': statusCode, 'color': Theme.of(context).colorScheme.primary, 'icon': Icons.flag_outlined};
+    final meta =
+        _docStatusMap[statusCode] ?? {'label': statusCode, 'color': Theme.of(context).colorScheme.primary, 'icon': Icons.flag_outlined};
 
     final Color baseColor = (meta['color'] as Color?) ?? Theme.of(context).colorScheme.primary;
     final Color bgColor = baseColor.withOpacity(0.12);
@@ -798,19 +908,37 @@ class OrderDetailPage extends StatelessWidget {
     return taxSummary;
   }
 
-  Widget _buildHeader({required Map<String, dynamic> order, required BuildContext context, required Future<Map<String, dynamic>?> feFuture, required bool hasCreditNote, required Color textColor}) {
+  Widget _buildHeader({
+    required Map<String, dynamic> order,
+    required BuildContext context,
+    required Future<Map<String, dynamic>?> feFuture,
+    required bool hasCreditNote,
+    required Color textColor,
+  }) {
     void syncFE({required int cInvoiceID}) async {
       final bool? confirmComplete = await _syncFEConfirmation(context);
       if (confirmComplete == true) {
         final Map<String, dynamic> syncResult = await syncFEProcess(cInvoiceID: cInvoiceID);
         if (syncResult['success'] == true && syncResult['isError'] != true) {
           if (context.mounted) {
-            Fluttertoast.showToast(msg: syncResult['summary'] ?? AppLocale.invoiceSentSuccess.getString(context), backgroundColor: Colors.green, textColor: Colors.white, gravity: ToastGravity.BOTTOM, toastLength: Toast.LENGTH_LONG);
+            Fluttertoast.showToast(
+              msg: syncResult['summary'] ?? AppLocale.invoiceSentSuccess.getString(context),
+              backgroundColor: Colors.green,
+              textColor: Colors.white,
+              gravity: ToastGravity.BOTTOM,
+              toastLength: Toast.LENGTH_LONG,
+            );
             Navigator.pop(context, true);
           }
         } else {
           if (context.mounted) {
-            Fluttertoast.showToast(msg: syncResult['summary'] ?? AppLocale.invoiceSendError.getString(context), backgroundColor: Colors.red, textColor: Colors.white, gravity: ToastGravity.BOTTOM, toastLength: Toast.LENGTH_LONG);
+            Fluttertoast.showToast(
+              msg: syncResult['summary'] ?? AppLocale.invoiceSendError.getString(context),
+              backgroundColor: Colors.red,
+              textColor: Colors.white,
+              gravity: ToastGravity.BOTTOM,
+              toastLength: Toast.LENGTH_LONG,
+            );
           }
         }
       }
@@ -832,10 +960,18 @@ class OrderDetailPage extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
             ),
             const SizedBox(height: 4),
-            Text(order['DateOrdered'], style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+            Text(formatIdempiereDateUI(order['Created']?.toString() ?? ''), style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
 
             const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 4, children: [_buildSubtypePill(context, order), _buildDocStatusPill(context, order), if (hasCreditNote) _buildCreditMemoPill()]),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                _buildSubtypePill(context, order),
+                _buildDocStatusPill(context, order),
+                if (hasCreditNote) _buildCreditMemoPill(context),
+              ],
+            ),
           ],
         );
 
@@ -902,7 +1038,12 @@ class OrderDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildFinalSummary({required Map<String, Map<String, double>> taxSummary, required double grandTotal, required BuildContext context, required Color textColor}) {
+  Widget _buildFinalSummary({
+    required Map<String, Map<String, double>> taxSummary,
+    required double grandTotal,
+    required BuildContext context,
+    required Color textColor,
+  }) {
     final double totalNeto = taxSummary.values.map((e) => e['net'] ?? 0.0).fold(0.0, (a, b) => a + b);
     final double totalImpuesto = taxSummary.values.map((e) => e['tax'] ?? 0.0).fold(0.0, (a, b) => a + b);
 
@@ -950,20 +1091,20 @@ class OrderDetailPage extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Theme.of(context).primaryColor.withOpacity(0.1),
+            color: const Color(0xff494371).withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
+            border: Border.all(color: const Color(0xff494371).withOpacity(0.3)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 AppLocale.finalTotal.getString(context).toUpperCase(),
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).primaryColor),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xff494371)),
               ),
               Text(
                 "\$${grandTotal.toStringAsFixed(2)}",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Theme.of(context).primaryColor),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Color(0xff494371)),
               ),
             ],
           ),

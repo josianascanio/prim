@@ -4,6 +4,7 @@ import 'package:http/http.dart';
 import '../../../API/endpoint.dart';
 import '../../../API/token.api.dart';
 import '../../Auth/auth_funtions.dart';
+import 'bpartner_repository.dart';
 
 Future<Map<String, dynamic>> postBPartner({required String name, required String location, String? email, required int cTaxTypeID, required int cBPartnerGroupID, String? taxID, String? dv, required String customerType, required BuildContext context}) async {
   try {
@@ -55,8 +56,30 @@ Future<Map<String, dynamic>> postBPartner({required String name, required String
     }
 
     final createdPartner = json.decode(bPartnerResponse.body);
+    final createdId = createdPartner['id'];
+    Map<String, dynamic>? cachedPartner;
+    if (createdId is int) {
+      try {
+        cachedPartner = await BPartnerRepository.instance.refreshById(context: context, id: createdId);
+      } catch (error) {
+        CurrentLogMessage.add('No se pudo enriquecer el cliente $createdId para caché: $error', level: 'WARNING', tag: 'bpartnerCache');
+        final fallback = <String, dynamic>{
+          ...Map<String, dynamic>.from(createdPartner),
+          'id': createdId,
+          'name': createdPartner['Name'] ?? name,
+          'TaxID': createdPartner['TaxID'] ?? taxID,
+          'dv': createdPartner['dv'] ?? dv,
+          'email': email,
+          'location': location,
+          'locationName': location,
+          'hasLocation': true,
+        };
+        await BPartnerRepository.instance.upsert(fallback);
+        cachedPartner = fallback;
+      }
+    }
 
-    return {'success': true, 'message': 'Cliente creado con éxito.', 'bpartner': createdPartner};
+    return {'success': true, 'message': 'Cliente creado con éxito.', 'bpartner': cachedPartner ?? createdPartner};
   } catch (e) {
     print('Excepción general: $e');
     return {'success': false, 'message': 'Error inesperado al crear el cliente.'};
@@ -200,7 +223,30 @@ Future<Map<String, dynamic>> putBPartner({required int id, required String name,
       }
     }
 
-    return {"success": true};
+    Map<String, dynamic>? cachedPartner;
+    try {
+      cachedPartner = await BPartnerRepository.instance.refreshById(context: context, id: id);
+    } catch (error) {
+      CurrentLogMessage.add('No se pudo enriquecer el cliente $id para caché: $error', level: 'WARNING', tag: 'bpartnerCache');
+      final existing = await BPartnerRepository.instance.readById(id) ?? <String, dynamic>{};
+      cachedPartner = <String, dynamic>{
+        ...existing,
+        'id': id,
+        'Name': name,
+        'name': name,
+        'TaxID': taxID,
+        'dv': dv,
+        'email': email,
+        'location': location,
+        'locationName': location,
+        'C_BP_Group_ID': cBPartnerGroupID,
+        'LCO_TaxIdType_ID': cTaxTypeID,
+        'TipoClienteFE': customerType,
+        'hasLocation': locationID != null,
+      };
+      await BPartnerRepository.instance.upsert(cachedPartner);
+    }
+    return {"success": true, "bpartner": cachedPartner};
   } catch (e) {
     print("Excepción en putBPartner: $e");
     return {"success": false, "message": "Excepción: $e"};

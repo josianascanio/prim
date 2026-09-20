@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:primware/shared/custom_container.dart';
 import 'package:primware/shared/custom_spacer.dart';
 import 'package:primware/shared/custom_textfield.dart';
@@ -12,12 +16,23 @@ import 'package:primware/views/Home/order/my_order_detail.dart';
 import 'package:primware/views/Home/order/my_order_new.dart';
 import 'package:printing/printing.dart';
 import '../../../API/pos.api.dart';
+import '../../../API/endpoint.dart';
+import '../../../API/token.api.dart';
+import '../../../API/user.api.dart';
 import '../../../shared/custom_app_menu.dart';
 import '../../../localization/app_locale.dart';
+import '../../../shared/format_date.dart';
 import '../../../shared/footer.dart';
 import 'my_order_print_generator.dart';
-import 'dart:ui';
 import '../../../shared/doc_type_chip.dart';
+import '../invoice/invoice_details.dart';
+import '../invoice/invoice_funtions.dart';
+import '../invoice/invoice_payment_print_generator.dart';
+import '../invoice/invoice_payment_receipt.dart';
+import 'history_search_criteria.dart';
+import 'order_history_repository.dart';
+import '../../../shared/glass_switch.dart';
+import '../../../shared/custom_pagination.dart';
 
 class OrderListPage extends StatefulWidget {
   const OrderListPage({super.key});
@@ -27,24 +42,51 @@ class OrderListPage extends StatefulWidget {
 }
 
 class _OrderListPageState extends State<OrderListPage> {
+  static const _paymentFilterValue = '__invoice_payments__';
+  static const _sourcePageSize = 50;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   List<Map<String, dynamic>> _orders = [];
-  bool _isLoading = true, isSearchLoading = false, onlyMyOrders = false;
+  List<InvoicePaymentReceipt> _invoicePaymentReceipts = [];
+  List<Map<String, dynamic>> _organizations = [];
+  bool _isLoadingReceipts = true;
+  bool _isLoading = true, isSearchLoading = false;
+  bool _isBackgroundSyncing = false;
+  bool _isManualRefresh = false;
+  final ScrollController _historyScrollController = ScrollController();
+  bool _hasPinnedFilters = false;
   String? selectedDocTypeFilter;
-  String _searchQuery = '';
-  TextEditingController searchController = TextEditingController();
+  HistorySearchCriteria _appliedCriteria = const HistorySearchCriteria();
+  HistorySearchCriteria _pendingCriteria = const HistorySearchCriteria();
+  final TextEditingController _customerSearchController = TextEditingController();
+  final TextEditingController _documentSearchController = TextEditingController();
+  final TextEditingController _localFilterController = TextEditingController();
+  final Map<int, UnifiedHistoryPage> _pageCache = {};
+  int _currentPage = 0;
+  int _totalRecords = 0;
+  String _localFilter = '';
+
+  String get _pinnedFiltersKey => 'order_history_filters_v1|${Base.baseURL}|${Token.client}|${Token.rol}|${UserData.id}';
 
   // Mapa de estados de documento (DocStatus) a nombre en español y color
   final Map<String, Map<String, dynamic>> _docStatusMap = {
-    'DR': {'label': 'Borrador', 'color': Colors.grey, 'icon': Icons.edit_note},
-    'CO': {'label': 'Completado', 'color': Colors.green, 'icon': Icons.check_circle_outline},
-    'CL': {'label': 'Cerrado', 'color': Colors.blueGrey, 'icon': Icons.lock_outline},
-    'VO': {'label': 'Anulado', 'color': Colors.red, 'icon': Icons.cancel_outlined},
-    'IP': {'label': 'En proceso', 'color': Colors.orange, 'icon': Icons.hourglass_bottom},
-    'PR': {'label': 'Preparado', 'color': Colors.orange, 'icon': Icons.hourglass_bottom},
-    'WC': {'label': 'Esperando completar', 'color': Colors.orangeAccent, 'icon': Icons.hourglass_top},
-    'AP': {'label': 'Aprobado', 'color': Colors.blue, 'icon': Icons.thumb_up_outlined},
-    'RJ': {'label': 'Rechazado', 'color': Colors.redAccent, 'icon': Icons.thumb_down_outlined},
+    'DR': {'label': AppLocale.statusDraft, 'color': Colors.grey, 'icon': Icons.edit_note},
+    'CO': {'label': AppLocale.statusCompleted, 'color': Colors.green, 'icon': Icons.check_circle_outline},
+    'CL': {'label': AppLocale.statusClosed, 'color': Colors.blueGrey, 'icon': Icons.lock_outline},
+    'VO': {'label': AppLocale.statusVoided, 'color': Colors.red, 'icon': Icons.cancel_outlined},
+    'IP': {'label': AppLocale.statusInProgress, 'color': Colors.orange, 'icon': Icons.hourglass_bottom},
+    'PR': {'label': AppLocale.statusPrepared, 'color': Colors.orange, 'icon': Icons.hourglass_bottom},
+    'WC': {'label': AppLocale.statusWaitingCompletion, 'color': Colors.orangeAccent, 'icon': Icons.hourglass_top},
+    'AP': {'label': AppLocale.statusApproved, 'color': Colors.blue, 'icon': Icons.thumb_up_outlined},
+    'RJ': {'label': AppLocale.statusRejected, 'color': Colors.redAccent, 'icon': Icons.thumb_down_outlined},
   };
+
+  String _localized(String key, [Map<String, Object> values = const {}]) {
+    var text = key.getString(context);
+    for (final entry in values.entries) {
+      text = text.replaceAll('{${entry.key}}', entry.value.toString());
+    }
+    return text;
+  }
 
   // Confirmación para imprimir ticket
   Future<bool?> _printTicketConfirmation(BuildContext context) {
@@ -155,7 +197,7 @@ class _OrderListPageState extends State<OrderListPage> {
           final printers = await Printing.listPrinters();
           final defaultPrinter = printers.firstWhere(
             (p) => p.isDefault,
-            orElse: () => printers.isNotEmpty ? printers.first : throw Exception('No hay impresoras disponibles'),
+            orElse: () => printers.isNotEmpty ? printers.first : throw Exception(AppLocale.noPrintersAvailable.getString(context)),
           );
 
           await Printing.directPrintPdf(printer: defaultPrinter, usePrinterSettings: true, dynamicLayout: true, onLayout: (_) => pdfBytes);
@@ -172,35 +214,792 @@ class _OrderListPageState extends State<OrderListPage> {
     }
   }
 
+  GiftInvoiceLabels get _giftInvoiceLabels => GiftInvoiceLabels(
+    title: AppLocale.giftInvoice.getString(context),
+    orderNumber: AppLocale.orderNumber.getString(context),
+    date: AppLocale.dateLabel.getString(context),
+    servedBy: AppLocale.servedBy.getString(context),
+    identification: AppLocale.identification.getString(context),
+    customer: AppLocale.customer.getString(context),
+    address: AppLocale.address.getString(context),
+    phone: AppLocale.phoneLabel.getString(context),
+    product: AppLocale.product.getString(context),
+    quantity: AppLocale.giftQuantityShort.getString(context),
+  );
+
+  Future<void> _printGiftInvoice(Map<String, dynamic> order) async {
+    final bool? confirm = await _printTicketConfirmation(context);
+    if (confirm != true) return;
+    try {
+      final pdfBytes = POS.isPOS
+          ? await generateGiftPOSTicket(order, labels: _giftInvoiceLabels)
+          : await generateGiftOrderTicket(order, labels: _giftInvoiceLabels);
+      try {
+        final printers = await Printing.listPrinters();
+        final defaultPrinter = printers.firstWhere(
+          (printer) => printer.isDefault,
+          orElse: () => printers.isNotEmpty ? printers.first : throw Exception(AppLocale.noPrintersAvailable.getString(context)),
+        );
+        await Printing.directPrintPdf(printer: defaultPrinter, usePrinterSettings: true, dynamicLayout: true, onLayout: (_) => pdfBytes);
+      } catch (_) {
+        await Printing.sharePdf(bytes: pdfBytes, filename: 'Factura_Regalo_${order['DocumentNo']}.pdf');
+      }
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
-    _fetchOrders();
+    OrderHistoryRepository.instance.addListener(_onHistoryCacheChanged);
+    _initializeHistory();
   }
 
-  Future<void> _fetchOrders({bool showLoadingIndicator = false}) async {
+  @override
+  void dispose() {
+    OrderHistoryRepository.instance.removeListener(_onHistoryCacheChanged);
+    _customerSearchController.dispose();
+    _documentSearchController.dispose();
+    _localFilterController.dispose();
+    _historyScrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onHistoryCacheChanged() async {
+    final cached = await OrderHistoryRepository.instance.readPage(criteria: _appliedCriteria, pageIndex: _currentPage);
+    if (!mounted || cached == null || isSearchLoading) return;
+    final items = <Object>[...cached.orders, ...cached.receipts]..sort((left, right) => _historyDate(right).compareTo(_historyDate(left)));
     setState(() {
-      if (showLoadingIndicator) {
-        isSearchLoading = true;
+      _pageCache[_currentPage] = UnifiedHistoryPage(items: items, totalCount: cached.totalCount, pageIndex: _currentPage);
+      _assignHistoryItems(items);
+      _totalRecords = cached.totalCount;
+    });
+  }
+
+  Future<void> _initializeHistory() async {
+    final organizations = List<Map<String, dynamic>>.from(UserData.organizations);
+    final prefs = await SharedPreferences.getInstance();
+    HistorySearchCriteria criteria = const HistorySearchCriteria();
+    var hasPinnedFilters = false;
+    final rawCriteria = prefs.getString(_pinnedFiltersKey);
+    if (rawCriteria != null) {
+      try {
+        final decoded = jsonDecode(rawCriteria);
+        if (decoded is Map) {
+          criteria = HistorySearchCriteria.fromJson(Map<String, dynamic>.from(decoded));
+          hasPinnedFilters = true;
+        }
+      } catch (_) {
+        await prefs.remove(_pinnedFiltersKey);
       }
-
-      _isLoading = true;
-    });
-
-    final result = await fetchOrders(context: context, filter: searchController.text, onlyMyOrders: onlyMyOrders);
+    }
+    if (criteria.organizationId != null && !organizations.any((organization) => organization['id'] == criteria.organizationId)) {
+      criteria = criteria.copyWith(clearOrganization: true);
+      if (hasPinnedFilters) {
+        await prefs.setString(_pinnedFiltersKey, jsonEncode(criteria.toJson()));
+      }
+    }
+    if (!mounted) return;
+    _customerSearchController.text = criteria.customerText;
+    _documentSearchController.text = criteria.documentText;
     setState(() {
-      _orders = result;
-      _isLoading = false;
-      isSearchLoading = false;
+      _organizations = organizations;
+      _pendingCriteria = criteria;
+      _hasPinnedFilters = hasPinnedFilters;
     });
+    await _loadHistory(initialLoad: true);
+  }
+
+  Future<void> _pinAndApplyFilters() async {
+    _updatePendingTextCriteria();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pinnedFiltersKey, jsonEncode(_pendingCriteria.toJson()));
+    if (!mounted) return;
+    setState(() => _hasPinnedFilters = true);
+    Navigator.of(context).pop();
+    await _loadHistory(page: 0, resetCache: true);
+  }
+
+  Future<void> _resetPinnedFilters() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pinnedFiltersKey);
+    if (!mounted) return;
+    _clearPendingCriteria();
+    setState(() => _hasPinnedFilters = false);
+    Navigator.of(context).pop();
+    await _loadHistory(page: 0, resetCache: true);
+  }
+
+  Future<void> _loadHistory({bool initialLoad = false, int page = 0, bool resetCache = false}) async {
+    if (!mounted) return;
+    var hasCachedPage = false;
+    if (resetCache) _pageCache.clear();
+    if (!resetCache && _pageCache[page] != null) {
+      final cached = _pageCache[page]!;
+      setState(() {
+        _currentPage = page;
+        _totalRecords = cached.totalCount;
+        _assignHistoryItems(cached.items);
+        _isLoading = false;
+        _isLoadingReceipts = false;
+      });
+      hasCachedPage = true;
+    } else {
+      final cached = await OrderHistoryRepository.instance.readPage(criteria: _pendingCriteria, pageIndex: page);
+      if (!mounted) return;
+      if (cached != null) {
+        final items = <Object>[...cached.orders, ...cached.receipts]
+          ..sort((left, right) => _historyDate(right).compareTo(_historyDate(left)));
+        final memoryPage = UnifiedHistoryPage(items: items, totalCount: cached.totalCount, pageIndex: page);
+        setState(() {
+          _pageCache[page] = memoryPage;
+          _currentPage = page;
+          _totalRecords = cached.totalCount;
+          _assignHistoryItems(items);
+          _appliedCriteria = _pendingCriteria;
+          _isLoading = false;
+          _isLoadingReceipts = false;
+        });
+        hasCachedPage = true;
+      }
+    }
+    setState(() {
+      _isLoading = !hasCachedPage;
+      _isLoadingReceipts = !hasCachedPage;
+      isSearchLoading = !initialLoad && !hasCachedPage;
+      _isBackgroundSyncing = hasCachedPage;
+    });
+    try {
+      final results = await Future.wait<dynamic>([
+        fetchOrdersPage(context: context, criteria: _pendingCriteria, top: _sourcePageSize, skip: page * _sourcePageSize),
+        fetchInvoicePaymentReceiptsPage(context: context, criteria: _pendingCriteria, top: _sourcePageSize, skip: page * _sourcePageSize),
+      ]);
+      if (!mounted) return;
+      final orderPage = results[0] as PagedResult<Map<String, dynamic>>;
+      final receiptPage = results[1] as PagedResult<InvoicePaymentReceipt>;
+      Set<int> returnedOrderIds = <int>{};
+      try {
+        returnedOrderIds = await fetchActiveReturnOrderIds(orderPage.records);
+      } catch (error) {
+        CurrentLogMessage.add(
+          'No se pudo enriquecer el historial con devoluciones: $error',
+          level: 'WARNING',
+          tag: 'fetchActiveReturnOrderIds',
+        );
+      }
+      for (final order in orderPage.records) {
+        final orderId = int.tryParse(order['id']?.toString() ?? '');
+        order['hasActiveReturn'] = orderId != null && returnedOrderIds.contains(orderId);
+      }
+      if (!mounted) return;
+      final items = <Object>[...orderPage.records, ...receiptPage.records]
+        ..sort((left, right) => _historyDate(right).compareTo(_historyDate(left)));
+      final unified = UnifiedHistoryPage(items: items, totalCount: orderPage.rowCount + receiptPage.rowCount, pageIndex: page);
+      await OrderHistoryRepository.instance.writePage(
+        criteria: _pendingCriteria,
+        pageIndex: page,
+        orders: orderPage.records,
+        receipts: receiptPage.records,
+        totalCount: unified.totalCount,
+      );
+      if (!mounted) return;
+      setState(() {
+        _pageCache[page] = unified;
+        _assignHistoryItems(items);
+        _currentPage = page;
+        _totalRecords = unified.totalCount;
+        _appliedCriteria = _pendingCriteria;
+        _isLoading = false;
+        _isLoadingReceipts = false;
+        isSearchLoading = false;
+        _isBackgroundSyncing = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isLoadingReceipts = false;
+        isSearchLoading = false;
+        _isBackgroundSyncing = false;
+      });
+      if (!hasCachedPage) {
+        ToastMessage.show(context: context, message: _localized(AppLocale.historyUpdateError, {'error': error}), type: ToastType.failure);
+      }
+    }
+  }
+
+  Future<void> _refreshHistory() async {
+    if (_isLoading || _isLoadingReceipts || isSearchLoading || _isBackgroundSyncing) {
+      return;
+    }
+    setState(() => _isManualRefresh = true);
+    try {
+      await _loadHistory(page: 0);
+    } finally {
+      if (mounted) setState(() => _isManualRefresh = false);
+    }
+  }
+
+  void _assignHistoryItems(List<Object> items) {
+    _orders = items.whereType<Map<String, dynamic>>().toList();
+    _invoicePaymentReceipts = items.whereType<InvoicePaymentReceipt>().toList();
   }
 
   List<Map<String, dynamic>> _getFilteredOrders() {
     return _orders.where((order) {
-      final matchesSearch = order['DocumentNo'].toString().toLowerCase().contains(_searchQuery.toLowerCase());
+      final query = _localFilter.trim().toLowerCase();
+      final matchesLocal =
+          query.isEmpty ||
+          (order['DocumentNo'] ?? '').toString().toLowerCase().contains(query) ||
+          (order['bpartner']?['name'] ?? '').toString().toLowerCase().contains(query);
       final matchesDocType = selectedDocTypeFilter == null || order['doctypetarget']?['name'] == selectedDocTypeFilter;
-      return matchesSearch && matchesDocType;
+      return matchesLocal && matchesDocType;
     }).toList();
+  }
+
+  List<InvoicePaymentReceipt> _getFilteredReceipts() {
+    if (selectedDocTypeFilter != null && selectedDocTypeFilter != _paymentFilterValue) {
+      return const [];
+    }
+    final query = _localFilter.trim().toLowerCase();
+    return _invoicePaymentReceipts.where((receipt) {
+      return query.isEmpty || receipt.customerName.toLowerCase().contains(query) || receipt.displayDocumentNo.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  List<Object> _getUnifiedHistory() {
+    final items = <Object>[..._getFilteredOrders(), ..._getFilteredReceipts()];
+    items.sort((left, right) => _historyDate(right).compareTo(_historyDate(left)));
+    return items;
+  }
+
+  DateTime _historyDate(Object item) {
+    if (item is InvoicePaymentReceipt) return item.date;
+    if (item is Map) {
+      return DateTime.tryParse((item['Created'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    }
+    return DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  void _stageCriteria(HistorySearchCriteria criteria) {
+    setState(() {
+      _pendingCriteria = criteria;
+      if (_customerSearchController.text != criteria.customerText) {
+        _customerSearchController.text = criteria.customerText;
+      }
+      if (_documentSearchController.text != criteria.documentText) {
+        _documentSearchController.text = criteria.documentText;
+      }
+    });
+  }
+
+  void _updatePendingTextCriteria() {
+    setState(() {
+      _pendingCriteria = _pendingCriteria.copyWith(
+        customerText: _customerSearchController.text.trim(),
+        documentText: _documentSearchController.text.trim(),
+      );
+    });
+  }
+
+  void _clearPendingCriteria() {
+    FocusScope.of(context).unfocus();
+    _customerSearchController.clear();
+    _documentSearchController.clear();
+    _stageCriteria(const HistorySearchCriteria());
+  }
+
+  void _resetSearchDraft() {
+    _customerSearchController.text = _appliedCriteria.customerText;
+    _documentSearchController.text = _appliedCriteria.documentText;
+    setState(() => _pendingCriteria = _appliedCriteria);
+  }
+
+  Future<void> _applyDrawerSearch() async {
+    Navigator.of(context).pop();
+    await _loadHistory(page: 0, resetCache: true);
+  }
+
+  Widget _buildSearchDrawer() {
+    final criteria = _pendingCriteria;
+    return Drawer(
+      width: MediaQuery.of(context).size.width.clamp(320, 460).toDouble(),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.manage_search_rounded, color: Theme.of(context).primaryColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      AppLocale.advancedSearch.getString(context),
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: AppLocale.close.getString(context),
+                    onPressed: () {
+                      _resetSearchDraft();
+                      Navigator.of(context).pop();
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      TextfieldTheme(
+                        controlador: _customerSearchController,
+                        texto: AppLocale.customerOrIdentification.getString(context),
+                        icono: Icons.person_search_outlined,
+                        maxLines: 1,
+                        fillColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Theme.of(context).cardColor,
+                        onChanged: (_) => _updatePendingTextCriteria(),
+                        onSubmitted: (_) {
+                          if (!isSearchLoading) _applyDrawerSearch();
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      TextfieldTheme(
+                        controlador: _documentSearchController,
+                        texto: AppLocale.orderReceiptInvoiceNumber.getString(context),
+                        icono: Icons.receipt_long_outlined,
+                        maxLines: 1,
+                        fillColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Theme.of(context).cardColor,
+                        onChanged: (_) => _updatePendingTextCriteria(),
+                        onSubmitted: (_) {
+                          if (!isSearchLoading) _applyDrawerSearch();
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      DropdownButtonFormField<String?>(
+                        value: criteria.docStatus,
+                        decoration: InputDecoration(
+                          labelText: AppLocale.documentStatus.getString(context),
+                          prefixIcon: const Icon(Icons.fact_check_outlined),
+                          filled: true,
+                          fillColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Theme.of(context).cardColor,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        items: [
+                          DropdownMenuItem<String?>(value: null, child: Text(AppLocale.allStatuses.getString(context))),
+                          ..._docStatusMap.entries.map(
+                            (entry) => DropdownMenuItem<String?>(
+                              value: entry.key,
+                              child: Text((entry.value['label'] as String).getString(context)),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            _stageCriteria(value == null ? criteria.copyWith(clearDocStatus: true) : criteria.copyWith(docStatus: value)),
+                      ),
+                      const SizedBox(height: 14),
+                      DropdownButtonFormField<int?>(
+                        value: criteria.organizationId,
+                        decoration: InputDecoration(
+                          labelText: AppLocale.organization.getString(context),
+                          prefixIcon: const Icon(Icons.business_outlined),
+                          filled: true,
+                          fillColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Theme.of(context).cardColor,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        items: [
+                          DropdownMenuItem<int?>(value: null, child: Text(AppLocale.allOrganizations.getString(context))),
+                          ..._organizations.map(
+                            (organization) => DropdownMenuItem<int?>(
+                              value: organization['id'] as int?,
+                              child: Text((organization['name'] ?? '').toString()),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) => _stageCriteria(
+                          value == null ? criteria.copyWith(clearOrganization: true) : criteria.copyWith(organizationId: value),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(AppLocale.onlyMyMovements.getString(context)),
+                        subtitle: Text(AppLocale.onlyMyMovementsSubtitle.getString(context)),
+                        trailing: GlassSwitch(
+                          value: criteria.onlyMyMovements,
+                          onChanged: (value) => _stageCriteria(criteria.copyWith(onlyMyMovements: value)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Text(
+                            AppLocale.pinnedFilters.getString(context),
+                            style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(width: 4),
+                          Tooltip(
+                            message: AppLocale.pinnedFiltersInfo.getString(context),
+                            decoration: BoxDecoration(color: Theme.of(context).primaryColor, borderRadius: BorderRadius.circular(6)),
+                            child: const Icon(Icons.info_outline, size: 18),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: isSearchLoading ? null : _pinAndApplyFilters,
+                            icon: Icon(_hasPinnedFilters ? Icons.push_pin : Icons.push_pin_outlined),
+                            label: Text((_hasPinnedFilters ? AppLocale.updatePinnedFilters : AppLocale.pinAndApply).getString(context)),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: isSearchLoading || !_hasPinnedFilters ? null : _resetPinnedFilters,
+                            icon: const Icon(Icons.restart_alt),
+                            label: Text(AppLocale.reset.getString(context)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Divider(),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: isSearchLoading
+                        ? null
+                        : () {
+                            _clearPendingCriteria();
+                            _applyDrawerSearch();
+                          },
+                    child: Text(AppLocale.clear.getString(context)),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      _resetSearchDraft();
+                      Navigator.of(context).pop();
+                    },
+                    child: Text(AppLocale.cancel.getString(context)),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: isSearchLoading ? null : _applyDrawerSearch,
+                    icon: const Icon(Icons.search),
+                    label: Text(AppLocale.search.getString(context)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocalFilterField() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppLocale.filterThisPage.getString(context),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          TextfieldTheme(
+            controlador: _localFilterController,
+            texto: AppLocale.customerOrderReceipt.getString(context),
+            icono: Icons.filter_alt_outlined,
+            maxLines: 1,
+            fillColor: Theme.of(context).brightness == Brightness.light ? Colors.white : Theme.of(context).cardColor,
+            onChanged: (value) {
+              setState(() => _localFilter = value.trim().toLowerCase());
+            },
+          ),
+          const SizedBox(height: 12),
+          Text(
+            AppLocale.documentTypeFilter.getString(context),
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          if (_orders.isNotEmpty || _invoicePaymentReceipts.isNotEmpty)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(AppLocale.all.getString(context)),
+                      labelStyle: TextStyle(
+                        color: selectedDocTypeFilter == null
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
+                      selected: selectedDocTypeFilter == null,
+                      selectedColor: Theme.of(context).primaryColor,
+                      checkmarkColor: Theme.of(context).colorScheme.onPrimary,
+                      onSelected: (_) {
+                        setState(() => selectedDocTypeFilter = null);
+                      },
+                    ),
+                  ),
+                  if (_invoicePaymentReceipts.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        avatar: const Icon(Icons.payments_outlined, size: 17),
+                        label: Text(AppLocale.invoicePayments.getString(context)),
+                        labelStyle: TextStyle(
+                          color: selectedDocTypeFilter == _paymentFilterValue
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : Theme.of(context).textTheme.bodyLarge?.color,
+                        ),
+                        selected: selectedDocTypeFilter == _paymentFilterValue,
+                        selectedColor: Theme.of(context).colorScheme.secondaryContainer,
+                        onSelected: (selected) {
+                          setState(() {
+                            selectedDocTypeFilter = selected ? _paymentFilterValue : null;
+                          });
+                        },
+                      ),
+                    ),
+                  ..._orders
+                      .map((order) => order['doctypetarget']?['name']?.toString() ?? '')
+                      .where((name) => name.isNotEmpty)
+                      .toSet()
+                      .map(
+                        (docName) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Text(docName),
+                            labelStyle: TextStyle(
+                              color: selectedDocTypeFilter == docName
+                                  ? Theme.of(context).colorScheme.onPrimary
+                                  : Theme.of(context).textTheme.bodyLarge?.color,
+                            ),
+                            selected: selectedDocTypeFilter == docName,
+                            selectedColor: Theme.of(context).primaryColor,
+                            checkmarkColor: Theme.of(context).colorScheme.onPrimary,
+                            onSelected: (selected) {
+                              setState(() {
+                                selectedDocTypeFilter = selected ? docName : null;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPagination() {
+    final visibleCount = _getUnifiedHistory().length;
+    final loadedCount = _orders.length + _invoicePaymentReceipts.length;
+    final totalPages = _totalRecords == 0 ? 1 : (_totalRecords / (_sourcePageSize * 2)).ceil();
+    final hasLocalFilter = _localFilter.isNotEmpty || selectedDocTypeFilter != null;
+    final start = _totalRecords == 0 ? 0 : (_currentPage * _sourcePageSize * 2) + 1;
+    final end = (start + loadedCount - 1).clamp(0, _totalRecords);
+    return Column(
+      children: [
+        Text(
+          hasLocalFilter
+              ? _localized(AppLocale.showingFilteredHistory, {'visible': visibleCount, 'loaded': loadedCount, 'total': _totalRecords})
+              : _localized(AppLocale.showingHistory, {'start': start, 'end': end, 'total': _totalRecords}),
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 10),
+        CustomPagination(
+          currentPage: _currentPage,
+          totalPages: totalPages,
+          onPrevious: _currentPage > 0 && !isSearchLoading ? () => _loadHistory(page: _currentPage - 1) : null,
+          onNext: _currentPage + 1 < totalPages && !isSearchLoading ? () => _loadHistory(page: _currentPage + 1) : null,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _printInvoicePaymentReceipt(InvoicePaymentReceipt receipt) async {
+    final confirm = await _printTicketConfirmation(context);
+    if (confirm != true) return;
+    try {
+      final pdfBytes = POS.isPOS ? await generateInvoicePaymentPOSTicket(receipt) : await generateInvoicePaymentReceipt(receipt);
+      try {
+        final printers = await Printing.listPrinters();
+        final defaultPrinter = printers.firstWhere(
+          (printer) => printer.isDefault,
+          orElse: () => printers.isNotEmpty ? printers.first : throw Exception(AppLocale.noPrintersAvailable.getString(context)),
+        );
+        await Printing.directPrintPdf(printer: defaultPrinter, usePrinterSettings: true, dynamicLayout: true, onLayout: (_) => pdfBytes);
+      } catch (_) {
+        await Printing.sharePdf(bytes: pdfBytes, filename: 'Recibo_Pago_${receipt.displayDocumentNo}.pdf');
+      }
+    } catch (_) {}
+  }
+
+  Widget _buildInvoicePaymentCard(InvoicePaymentReceipt receipt) {
+    final green = Colors.green.shade700;
+    final contentColor =
+        Theme.of(context).textTheme.bodyLarge?.color ?? (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87);
+    final cardColor = Color.alphaBlend(
+      Colors.green.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.12 : 0.07),
+      Theme.of(context).cardColor,
+    );
+    Widget chip(String label, IconData icon, Color rawColor) {
+      final bool isDark = Theme.of(context).brightness == Brightness.dark;
+      final Color color = isDark ? Color.alphaBlend(Colors.white.withOpacity(0.4), rawColor) : rawColor;
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(50),
+          border: Border.all(color: color),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InvoicePaymentDetailsPage(receipt: receipt))),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: green.withOpacity(0.18)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 40,
+                  width: 40,
+                  decoration: BoxDecoration(color: green.withOpacity(0.12), shape: BoxShape.circle),
+                  child: Icon(Icons.person, color: green, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        receipt.customerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _localized(AppLocale.receiptNumber, {'number': receipt.displayDocumentNo}),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: AppLocale.printTicket.getString(context),
+                  onPressed: () => _printInvoicePaymentReceipt(receipt),
+                  icon: const Icon(Icons.print_outlined, color: Colors.green),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: green.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: green.withOpacity(0.12)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.payments_outlined, color: contentColor, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        AppLocale.summary.getString(context),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(color: contentColor, fontWeight: FontWeight.w700),
+                      ),
+                      const Spacer(),
+                      Icon(Icons.calendar_today_outlined, color: contentColor, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        formatDateUI(receipt.date.toIso8601String()),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: contentColor),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(Icons.account_balance_wallet_outlined, color: contentColor, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${AppLocale.amountLabel.getString(context)} ',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: contentColor, fontWeight: FontWeight.w500),
+                      ),
+                      Text(
+                        'B/.${receipt.totalApplied.toStringAsFixed(2)}',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: contentColor, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, thickness: 0.5)),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                chip(AppLocale.invoicePayments.getString(context), Icons.receipt_long_outlined, green),
+                chip(AppLocale.statusCompleted.getString(context), Icons.check_circle_outline, Colors.green),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _onOrderAction(String action, Map<String, dynamic> order) async {
@@ -244,7 +1043,7 @@ class _OrderListPageState extends State<OrderListPage> {
                     ...POS.docTypesComplete.map((doc) {
                       final dynamic rawId = doc['id'];
                       final int? docTypeId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
-                      final String docName = (doc['name'] ?? doc['Name'] ?? 'Documento').toString();
+                      final String docName = (doc['name'] ?? doc['Name'] ?? AppLocale.genericDocument.getString(context)).toString();
 
                       if (doc['DocSubTypeSO'] == 'RM' || docTypeId == POS.docTypeRefundID || docTypeId == order['doctypetarget']?['id']) {
                         return const SizedBox.shrink();
@@ -267,7 +1066,9 @@ class _OrderListPageState extends State<OrderListPage> {
                                   OrderNewPage(isRefund: false, doctypeID: docTypeId, orderName: docName, sourceOrderId: order['id']),
                             ),
                           ).then((value) {
-                            if (value == true) _fetchOrders(showLoadingIndicator: true);
+                            if (value == true) {
+                              _loadHistory(page: _currentPage, resetCache: true);
+                            }
                           });
                         },
                       );
@@ -280,21 +1081,34 @@ class _OrderListPageState extends State<OrderListPage> {
         );
         break;
       case 'refund':
+        final orderId = int.tryParse((order['id'] ?? order['C_Order_ID'] ?? order['record_id'])?.toString() ?? '');
+        if (orderId == null) return;
+        try {
+          if (await hasActiveReturnForOrder(orderId: orderId, invoices: order['C_Invoice'] as List? ?? const [])) {
+            if (!mounted) return;
+            ToastMessage.show(context: context, message: AppLocale.returnAlreadyExists.getString(context), type: ToastType.warning);
+            await _loadHistory(page: _currentPage, resetCache: true);
+            return;
+          }
+        } catch (_) {
+          if (!mounted) return;
+          ToastMessage.show(context: context, message: AppLocale.returnValidationError.getString(context), type: ToastType.failure);
+          return;
+        }
         final bool? confirm = await _refundConfirmation(context);
 
         if (confirm == true) {
           if (!mounted) return;
-          Navigator.push(
+          final completed = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
-              builder: (_) => OrderNewPage(
-                isRefund: true,
-                doctypeID: POS.docTypeRefundID,
-                orderName: POS.docTypeRefundName,
-                sourceOrderId: order['id'] ?? order['C_Order_ID'] ?? order['record_id'],
-              ),
+              builder: (_) =>
+                  OrderNewPage(isRefund: true, doctypeID: POS.docTypeRefundID, orderName: POS.docTypeRefundName, sourceOrderId: orderId),
             ),
           );
+          if (mounted && completed == true) {
+            await _loadHistory(page: _currentPage, resetCache: true);
+          }
         }
         break;
       case 'convertQuote':
@@ -313,12 +1127,43 @@ class _OrderListPageState extends State<OrderListPage> {
       case 'printTicket':
         _printTicket(order);
         break;
+      case 'printGiftInvoice':
+        if (order['DocStatus'] == 'CO' && !_isReturnOrder(order)) {
+          _printGiftInvoice(order);
+        }
+        break;
       case 'arc':
+        final arcOrderId = int.tryParse(order['id']?.toString() ?? '');
+        if (arcOrderId == null) return;
+        try {
+          if (await hasActiveReturnForOrder(orderId: arcOrderId, invoices: order['C_Invoice'] as List? ?? const [])) {
+            if (!mounted) return;
+            ToastMessage.show(context: context, message: AppLocale.returnAlreadyExists.getString(context), type: ToastType.warning);
+            await _loadHistory(page: _currentPage, resetCache: true);
+            return;
+          }
+        } catch (_) {
+          if (!mounted) return;
+          ToastMessage.show(context: context, message: AppLocale.returnValidationError.getString(context), type: ToastType.failure);
+          return;
+        }
         final bool? confirmArc = await _refundConfirmation(context);
         if (confirmArc == true) {
+          try {
+            if (await hasActiveReturnForOrder(orderId: arcOrderId, invoices: order['C_Invoice'] as List? ?? const [])) {
+              if (!mounted) return;
+              ToastMessage.show(context: context, message: AppLocale.returnAlreadyExists.getString(context), type: ToastType.warning);
+              await _loadHistory(page: _currentPage, resetCache: true);
+              return;
+            }
+          } catch (_) {
+            if (!mounted) return;
+            ToastMessage.show(context: context, message: AppLocale.returnValidationError.getString(context), type: ToastType.failure);
+            return;
+          }
           final bool creditMemoSucces = await createCreditMemo(cInvoiceID: order['C_Invoice']?[0]?['id']);
           if (creditMemoSucces) {
-            _fetchOrders(showLoadingIndicator: true);
+            _loadHistory(page: _currentPage, resetCache: true);
           }
         }
         break;
@@ -327,11 +1172,15 @@ class _OrderListPageState extends State<OrderListPage> {
         if (confirmDocComplete == true) {
           final docCompleteSucces = await docComplete(cOrderID: order['id']);
           if (docCompleteSucces["success"] == true && docCompleteSucces["isError"] == false) {
-            _fetchOrders(showLoadingIndicator: true);
+            _loadHistory(page: _currentPage, resetCache: true);
           } else if (docCompleteSucces["success"] == true && docCompleteSucces["isError"] == true) {
-            if (mounted) ToastMessage.show(context: context, message: docCompleteSucces["summary"], type: ToastType.failure);
+            if (mounted) {
+              ToastMessage.show(context: context, message: docCompleteSucces["summary"], type: ToastType.failure);
+            }
           } else {
-            if (mounted) ToastMessage.show(context: context, message: AppLocale.noDocComplete.getString(context), type: ToastType.failure);
+            if (mounted) {
+              ToastMessage.show(context: context, message: AppLocale.noDocComplete.getString(context), type: ToastType.failure);
+            }
           }
         }
         break;
@@ -341,17 +1190,23 @@ class _OrderListPageState extends State<OrderListPage> {
   }
 
   Widget _buildSubtypePill(Map<String, dynamic> order) {
-    final sub = order['doctypetarget']?['subtype']?['id'];
-    final bool isReturn = (sub == 'RM') || (order['doctypetarget']?['id'] == POS.docTypeRefundID);
+    final bool isReturn = _isReturnOrder(order);
     final String? docName = order['doctypetarget']?['name'];
 
     return DocTypeChip(docTypeName: docName, isReturn: isReturn);
   }
 
+  bool _isReturnOrder(Map<String, dynamic> order) {
+    final subtype = order['doctypetarget']?['subtype'];
+    final subtypeCode = subtype is Map ? subtype['id'] : subtype;
+    return subtypeCode == 'RM' || order['doctypetarget']?['id'] == POS.docTypeRefundID;
+  }
+
   Widget _buildCreditMemoPill() {
-    final Color baseColor = Colors.red;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color baseColor = isDark ? Colors.red.shade300 : Colors.red;
     final Color bgColor = baseColor.withOpacity(0.12);
-    final String label = AppLocale.creditNote.getString(context);
+    final String label = AppLocale.refundGenerated.getString(context);
     final IconData icon = Icons.receipt_long_outlined;
 
     return Container(
@@ -384,9 +1239,11 @@ class _OrderListPageState extends State<OrderListPage> {
     final meta =
         _docStatusMap[statusCode] ?? {'label': statusCode, 'color': Theme.of(context).colorScheme.primary, 'icon': Icons.flag_outlined};
 
-    final Color baseColor = meta['color'] as Color;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color rawColor = meta['color'] as Color;
+    final Color baseColor = isDark ? Color.alphaBlend(Colors.white.withOpacity(0.4), rawColor) : rawColor;
     final Color bgColor = baseColor.withOpacity(0.12);
-    final String label = meta['label'] as String;
+    final String label = (meta['label'] as String).getString(context);
     final IconData icon = meta['icon'] as IconData;
 
     return Container(
@@ -425,12 +1282,19 @@ class _OrderListPageState extends State<OrderListPage> {
               children: [
                 TextSpan(
                   text: '$label: ',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade400 : Colors.grey.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 TextSpan(
                   text: value,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: highlight ? accentColor : Theme.of(context).textTheme.bodyMedium?.color,
+                    color: highlight
+                        ? accentColor
+                        : (Theme.of(context).brightness == Brightness.dark
+                              ? Colors.grey.shade200
+                              : Theme.of(context).textTheme.bodyMedium?.color),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -444,21 +1308,19 @@ class _OrderListPageState extends State<OrderListPage> {
 
   Widget _buildOrderCard(Map<String, dynamic> order) {
     final bool isComplete = (order['DocStatus'] == 'CO');
-    final bool isReturn = (order['doctypetarget']?['id'] == POS.docTypeRefundID);
+    final bool isReturn = _isReturnOrder(order);
     final double totalLines = double.tryParse(order['TotalLines']?.toString() ?? '0') ?? 0;
     final double grandTotal = double.tryParse(order['GrandTotal']?.toString() ?? '0') ?? 0;
     final double taxAmount = grandTotal - totalLines;
 
     final List invoices = order['C_Invoice'] ?? [];
-    final bool hasCreditNote = invoices.any((inv) {
-      return inv['RelatedInvoice_ID'] != null;
-    });
+    final bool hasCreditNote = !isReturn && order['hasActiveReturn'] == true;
 
     return GestureDetector(
       onTap: () async {
         final refreshed = await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderDetailPage(order: order)));
         if (refreshed == true) {
-          _fetchOrders();
+          _loadHistory(page: _currentPage, resetCache: true);
         }
       },
       child: Container(
@@ -520,6 +1382,17 @@ class _OrderListPageState extends State<OrderListPage> {
                           ],
                         ),
                       ),
+                      if (isComplete && !isReturn && !hasCreditNote)
+                        PopupMenuItem<String>(
+                          value: 'printGiftInvoice',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.card_giftcard, color: Colors.deepOrange),
+                              const SizedBox(width: 8),
+                              Text(AppLocale.giftInvoice.getString(context)),
+                            ],
+                          ),
+                        ),
                       PopupMenuItem<String>(
                         value: 'duplicate',
                         child: Row(
@@ -552,7 +1425,7 @@ class _OrderListPageState extends State<OrderListPage> {
                           ),
                         ),
                     ];
-                    if (isReturn == false && POS.isPOS == true && !hasCreditNote) {
+                    if (isReturn == false && POS.isPOS == true && isComplete && !hasCreditNote && invoices.isNotEmpty) {
                       items.add(
                         PopupMenuItem<String>(
                           value: 'refund',
@@ -566,7 +1439,7 @@ class _OrderListPageState extends State<OrderListPage> {
                         ),
                       );
                     }
-                    if (POS.isPOS == false && isComplete == true && !hasCreditNote && invoices.isNotEmpty) {
+                    if (!isReturn && POS.isPOS == false && isComplete == true && !hasCreditNote && invoices.isNotEmpty) {
                       items.add(
                         PopupMenuItem<String>(
                           value: 'arc',
@@ -610,9 +1483,18 @@ class _OrderListPageState extends State<OrderListPage> {
                         ).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.w700),
                       ),
                       const Spacer(),
-                      Icon(Icons.calendar_today_outlined, color: Colors.grey.shade500, size: 16),
+                      Icon(
+                        Icons.calendar_today_outlined,
+                        color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade400 : Colors.grey.shade500,
+                        size: 16,
+                      ),
                       const SizedBox(width: 6),
-                      Text(order['DateOrdered'], style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600)),
+                      Text(
+                        formatIdempiereDateUI(order['Created']?.toString() ?? ''),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade300 : Colors.grey.shade600,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -663,8 +1545,41 @@ class _OrderListPageState extends State<OrderListPage> {
         return Future.value(false);
       },
       child: Scaffold(
-        appBar: AppBar(title: Text(AppLocale.myOrders.getString(context))),
+        key: _scaffoldKey,
+        appBar: AppBar(
+          title: Text(AppLocale.myOrders.getString(context)),
+          actions: [
+            IconButton(
+              tooltip: AppLocale.advancedSearch.getString(context),
+              onPressed: () {
+                _resetSearchDraft();
+                _scaffoldKey.currentState?.openEndDrawer();
+              },
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.tune_rounded),
+                  if (!_appliedCriteria.isEmpty)
+                    Positioned(
+                      right: -3,
+                      top: -3,
+                      child: Container(
+                        width: 11,
+                        height: 11,
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
         drawer: MenuDrawer(),
+        endDrawer: _buildSearchDrawer(),
         floatingActionButton: POS.docTypeID != null
             ? FloatingActionButton(
                 onPressed: () {
@@ -686,150 +1601,79 @@ class _OrderListPageState extends State<OrderListPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextfieldTheme(
-                          controlador: searchController,
-                          texto: AppLocale.searchOrder.getString(context),
-                          icono: Icons.receipt_long_rounded,
-                          onSubmitted: (p0) => _fetchOrders(showLoadingIndicator: true),
-                          onChanged: (value) {
-                            setState(() {
-                              _searchQuery = value;
-                            });
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: CustomSpacer.small),
-                      Container(
-                        height: 45,
-                        decoration: BoxDecoration(color: Theme.of(context).primaryColor, borderRadius: BorderRadius.circular(8)),
-                        child: IconButton(
-                          icon: const Icon(Icons.search, color: Colors.white),
-                          onPressed: () => _fetchOrders(showLoadingIndicator: true),
-                        ),
-                      ),
-                    ],
+                  _buildLocalFilterField(),
+
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 280),
+                    reverseDuration: const Duration(milliseconds: 180),
+                    transitionBuilder: (child, animation) => SizeTransition(
+                      sizeFactor: animation,
+                      axisAlignment: -1,
+                      child: FadeTransition(opacity: animation, child: child),
+                    ),
+                    child: _isBackgroundSyncing && !_isManualRefresh
+                        ? const Padding(
+                            key: ValueKey('history-syncing'),
+                            padding: EdgeInsets.only(top: CustomSpacer.medium),
+                            child: _HistorySyncCard(),
+                          )
+                        : const SizedBox(key: ValueKey('history-synced')),
                   ),
-
-                  const SizedBox(height: 8),
-
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.black.withOpacity(0.2)
-                          : Colors.white.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.1)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.receipt,
-                              size: 22,
-                              color: onlyMyOrders ? Theme.of(context).primaryColor : Colors.grey.shade600,
-                            ), // Icono más grande
-                            const SizedBox(width: 12),
-                            Text(
-                              AppLocale.onlyMyOrders.getString(context),
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: onlyMyOrders ? FontWeight.bold : FontWeight.w500,
-                                color: onlyMyOrders
-                                    ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87)
-                                    : Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        GlassSwitch(
-                          value: onlyMyOrders,
-                          onChanged: (newValue) {
-                            setState(() {
-                              onlyMyOrders = newValue;
-                              _fetchOrders(showLoadingIndicator: true);
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  if (_orders.isNotEmpty)
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Row(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8.0, left: 16.0),
-                              child: FilterChip(
-                                label: const Text('Todos'),
-                                selected: selectedDocTypeFilter == null,
-                                selectedColor: Theme.of(context).primaryColor,
-                                checkmarkColor: Theme.of(context).colorScheme.onPrimary,
-                                onSelected: (bool selected) {
-                                  setState(() {
-                                    selectedDocTypeFilter = null;
-                                  });
-                                },
-                              ),
-                            ),
-                            ..._orders
-                                .map((e) => e['doctypetarget']?['name']?.toString() ?? '')
-                                .where((name) => name.isNotEmpty)
-                                .toSet()
-                                .map((docName) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
-                                    child: FilterChip(
-                                      label: Text(docName),
-                                      selected: selectedDocTypeFilter == docName,
-                                      selectedColor: Theme.of(context).primaryColor,
-                                      checkmarkColor: Theme.of(context).colorScheme.onPrimary,
-                                      onSelected: (bool selected) {
-                                        setState(() {
-                                          selectedDocTypeFilter = selected ? docName : null;
-                                        });
-                                      },
-                                    ),
-                                  );
-                                })
-                                .toList(),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                  if (isSearchLoading) ...[const SizedBox(height: 4), const LinearProgressIndicator(), const SizedBox(height: 8)],
 
                   const SizedBox(height: CustomSpacer.medium),
 
                   Expanded(
-                    child: _isLoading
+                    child: _isLoading || _isLoadingReceipts
                         ? ShimmerList(separation: CustomSpacer.medium)
-                        : _getFilteredOrders().isEmpty
-                        ? Center(
-                            child: Text(
-                              AppLocale.errorNoOrders.getString(context),
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey),
-                            ),
-                          )
-                        : ListView.builder(
-                            physics: const BouncingScrollPhysics(),
-                            itemCount: _getFilteredOrders().length,
-                            itemBuilder: (context, index) {
-                              final order = _getFilteredOrders()[index];
-                              return _buildOrderCard(order);
-                            },
+                        : CustomScrollView(
+                            controller: _historyScrollController,
+                            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                            slivers: [
+                              CupertinoSliverRefreshControl(
+                                refreshTriggerPullDistance: 96,
+                                refreshIndicatorExtent: 64,
+                                onRefresh: _refreshHistory,
+                                builder: (context, mode, pulledExtent, triggerDistance, indicatorExtent) {
+                                  if (mode == RefreshIndicatorMode.inactive) return const SizedBox.shrink();
+                                  final progress = (pulledExtent / triggerDistance).clamp(0.0, 1.0);
+                                  return _PullRefreshContent(
+                                    syncing:
+                                        mode == RefreshIndicatorMode.armed ||
+                                        mode == RefreshIndicatorMode.refresh ||
+                                        mode == RefreshIndicatorMode.done,
+                                    armed: mode == RefreshIndicatorMode.armed,
+                                    progress: progress,
+                                    pulledExtent: pulledExtent,
+                                    indicatorExtent: indicatorExtent,
+                                  );
+                                },
+                              ),
+                              if (_getUnifiedHistory().isEmpty)
+                                SliverToBoxAdapter(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 40),
+                                    child: Center(
+                                      child: Text(
+                                        AppLocale.noMatchesThisPage.getString(context),
+                                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              else
+                                SliverList.builder(
+                                  itemCount: _getUnifiedHistory().length,
+                                  itemBuilder: (context, index) {
+                                    final item = _getUnifiedHistory()[index];
+                                    return item is InvoicePaymentReceipt
+                                        ? _buildInvoicePaymentCard(item)
+                                        : _buildOrderCard(item as Map<String, dynamic>);
+                                  },
+                                ),
+                              SliverToBoxAdapter(
+                                child: Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: _buildPagination()),
+                              ),
+                            ],
                           ),
                   ),
                 ],
@@ -842,56 +1686,271 @@ class _OrderListPageState extends State<OrderListPage> {
   }
 }
 
-class GlassSwitch extends StatelessWidget {
-  final bool value;
-  final ValueChanged<bool> onChanged;
+class _PullRefreshContent extends StatelessWidget {
+  const _PullRefreshContent({
+    required this.syncing,
+    required this.armed,
+    required this.progress,
+    required this.pulledExtent,
+    required this.indicatorExtent,
+  });
 
-  const GlassSwitch({super.key, required this.value, required this.onChanged});
+  final bool syncing;
+  final bool armed;
+  final double progress;
+  final double pulledExtent;
+  final double indicatorExtent;
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).primaryColor;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        width: 56,
-        height: 32,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: value ? primary.withOpacity(0.3) : (isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05)),
-          border: Border.all(color: value ? primary.withOpacity(0.6) : (isDark ? Colors.white30 : Colors.black12), width: 1.5),
-          boxShadow: [if (value) BoxShadow(color: primary.withOpacity(0.2), blurRadius: 8, spreadRadius: 1)],
+    final visibility = (pulledExtent / math.max(indicatorExtent * 0.72, 1)).clamp(0.0, 1.0);
+    return ClipRect(
+      child: Opacity(
+        opacity: visibility,
+        child: Transform.scale(
+          scale: 0.9 + (visibility * 0.1),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 240),
+            reverseDuration: const Duration(milliseconds: 180),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(animation), child: child),
+            ),
+            child: syncing
+                ? const _HistorySyncCard(key: ValueKey('pull-syncing'))
+                : _PullToSyncHint(key: const ValueKey('pull-progress'), progress: progress, armed: armed),
+          ),
         ),
-        child: Stack(
+      ),
+    );
+  }
+}
+
+class _PullToSyncHint extends StatelessWidget {
+  const _PullToSyncHint({super.key, required this.progress, required this.armed});
+
+  final double progress;
+  final bool armed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final color = armed ? colors.primary : colors.onSurfaceVariant;
+    return Semantics(
+      liveRegion: true,
+      label: AppLocale.pullToSync.getString(context),
+      value: '${(progress * 100).round()}%',
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutBack,
-              top: 2,
-              bottom: 2,
-              left: value ? 26 : 2,
-              right: value ? 2 : 26,
-              child: ClipOval(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: value ? primary.withOpacity(0.8) : (isDark ? Colors.white70 : Colors.white),
-                      border: Border.all(color: Colors.white.withOpacity(0.5), width: 1),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))],
+            SizedBox.square(
+              dimension: 38,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(end: progress),
+                    duration: const Duration(milliseconds: 90),
+                    curve: Curves.easeOut,
+                    builder: (context, value, _) => SizedBox.square(
+                      dimension: 36,
+                      child: CircularProgressIndicator(
+                        value: value,
+                        strokeWidth: 3,
+                        backgroundColor: colors.outlineVariant.withOpacity(0.35),
+                        color: color,
+                      ),
                     ),
                   ),
-                ),
+                  AnimatedRotation(
+                    turns: armed ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutBack,
+                    child: AnimatedScale(
+                      scale: armed ? 1.12 : 1,
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutBack,
+                      child: Icon(Icons.arrow_downward_rounded, size: 21, color: color),
+                    ),
+                  ),
+                ],
               ),
+            ),
+            const SizedBox(width: 10),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              style: Theme.of(context).textTheme.titleSmall!.copyWith(color: color, fontWeight: FontWeight.w700),
+              child: Text(AppLocale.pullToSync.getString(context)),
             ),
           ],
         ),
       ),
     );
+  }
+}
+
+class _HistorySyncCard extends StatefulWidget {
+  const _HistorySyncCard({super.key});
+
+  @override
+  State<_HistorySyncCard> createState() => _HistorySyncCardState();
+}
+
+class _HistorySyncCardState extends State<_HistorySyncCard> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  bool _reduceMotion = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1650));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (reduceMotion == _reduceMotion && (_controller.isAnimating || reduceMotion)) {
+      return;
+    }
+    _reduceMotion = reduceMotion;
+    if (_reduceMotion) {
+      _controller.stop();
+      _controller.value = 0.35;
+    } else {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final baseTextColor = dark ? Colors.white.withOpacity(0.58) : const Color(0xFF56535F);
+    final highlightTextColor = dark ? Colors.white : const Color(0xFFA7A3AF);
+    final textStyle = Theme.of(
+      context,
+    ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.1, color: baseTextColor);
+    return Semantics(
+      liveRegion: true,
+      label: AppLocale.lookingForUpdates.getString(context),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final progress = _controller.value;
+          final zoom = 1 + (math.sin(progress * math.pi) * 0.018);
+          final label = Text(AppLocale.lookingForUpdates.getString(context), style: textStyle);
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CustomPaint(
+                    size: const Size.square(50),
+                    painter: _ThinkingOrbPainter(progress: _controller.value, brightness: Theme.of(context).brightness),
+                  ),
+                  const SizedBox(width: 10),
+                  ExcludeSemantics(
+                    child: _reduceMotion
+                        ? label
+                        : Transform.scale(
+                            scale: zoom,
+                            alignment: Alignment.centerLeft,
+                            child: ShaderMask(
+                              blendMode: BlendMode.srcIn,
+                              shaderCallback: (bounds) => LinearGradient(
+                                begin: Alignment(-2.4 + (progress * 3.8), 0),
+                                end: Alignment(-1.0 + (progress * 3.8), 0),
+                                colors: [baseTextColor, highlightTextColor, baseTextColor],
+                                stops: const [0, 0.5, 1],
+                              ).createShader(bounds),
+                              child: label,
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ThinkingOrbPainter extends CustomPainter {
+  const _ThinkingOrbPainter({required this.progress, required this.brightness});
+
+  final double progress;
+  final Brightness brightness;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = (size.shortestSide / 2) - 8;
+    final phase = progress * math.pi * 2;
+    final dark = brightness == Brightness.dark;
+    final background = dark ? const Color(0xFF343B62) : const Color(0xFFE9ECF8);
+    final palette = dark
+        ? const [Color(0xFF79E8FF), Color(0xFF9298FF), Color(0xFFE28BFF)]
+        : const [Color(0xFF087EA4), Color(0xFF5361D8), Color(0xFF9A42C8)];
+
+    canvas.drawCircle(
+      center,
+      radius * 0.94,
+      Paint()
+        ..color = (dark ? const Color(0xFF8E96FF) : const Color(0xFF7683DD)).withOpacity(dark ? 0.32 : 0.18)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, dark ? 7 : 5),
+    );
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.25, -0.3),
+          radius: 1.05,
+          colors: [background.withOpacity(0.96), dark ? const Color(0xFF171A2B) : const Color(0xFFF1F3FA)],
+        ).createShader(Rect.fromCircle(center: center, radius: radius)),
+    );
+    canvas.save();
+    canvas.clipPath(Path()..addOval(Rect.fromCircle(center: center, radius: radius)));
+
+    for (var index = 0; index < palette.length; index++) {
+      final angle = phase + (index * math.pi * 2 / palette.length);
+      final orbit = radius * (0.22 + index * 0.04);
+      final blobCenter = center + Offset(math.cos(angle) * orbit, math.sin(angle * 1.17) * orbit);
+      final blobRadius = radius * (0.82 - index * 0.08);
+      final paint = Paint()
+        ..shader = RadialGradient(
+          colors: [palette[index].withOpacity(dark ? 1 : 0.92), palette[index].withOpacity(0)],
+          stops: const [0, 1],
+        ).createShader(Rect.fromCircle(center: blobCenter, radius: blobRadius));
+      canvas.drawCircle(blobCenter, blobRadius, paint);
+    }
+
+    final glowCenter = center + Offset(math.sin(phase * 0.7) * radius * 0.2, math.cos(phase * 0.9) * radius * 0.2);
+    canvas.drawCircle(
+      glowCenter,
+      radius * 0.34,
+      Paint()
+        ..color = Colors.white.withOpacity(dark ? 0.48 : 0.38)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThinkingOrbPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.brightness != brightness;
   }
 }

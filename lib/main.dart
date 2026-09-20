@@ -1,5 +1,4 @@
 // main.dart
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -8,12 +7,42 @@ import 'package:primware/theme/theme.dart';
 import 'package:primware/localization/app_locale.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'API/endpoint.dart';
+import 'package:app_links/app_links.dart';
+import 'package:protocol_handler/protocol_handler.dart';
+import 'dart:async';
+import 'package:primware/API/user.api.dart';
+import 'views/Home/product/product_repository.dart';
+import 'views/Home/product/product_sync_overlay.dart';
+import 'views/Home/order/order_history_repository.dart';
+import 'views/Home/bpartner/bpartner_repository.dart';
+import 'views/Home/bpartner/bpartner_sync_overlay.dart';
+import 'shared/theme_switcher_controller.dart';
+import 'package:upgrader/upgrader.dart';
+import 'shared/custom_upgrade_alert.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final ValueNotifier<ThemeData> appThemeNotifier = ValueNotifier(AppThemes.lightTheme);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (Platform.isWindows || Platform.isMacOS) {
+    await protocolHandler.register('primware');
+  }
+
   HttpOverrides.global = MyHttpOverrides();
   await FlutterLocalization.instance.ensureInitialized();
-  runApp(const MainApp());
+  await ProductRepository.instance.initialize();
+  await OrderHistoryRepository.instance.initialize();
+  await BPartnerRepository.instance.initialize();
+
+  await UserData.loadFromCache();
+
+  final prefs = await SharedPreferences.getInstance();
+  final isDarkMode = prefs.getBool('isDarkMode') ?? false;
+  appThemeNotifier.value = isDarkMode ? AppThemes.darkTheme : AppThemes.lightTheme;
+
+  runApp(MainApp(initialIsDarkMode: isDarkMode));
 }
 
 class MyHttpOverrides extends HttpOverrides {
@@ -24,51 +53,94 @@ class MyHttpOverrides extends HttpOverrides {
 }
 
 class MainApp extends StatefulWidget {
-  const MainApp({super.key});
+  final bool initialIsDarkMode;
+  const MainApp({super.key, required this.initialIsDarkMode});
 
   @override
   State<MainApp> createState() => _MainAppState();
 }
 
-class ThemeManager {
-  static late _MainAppState themeNotifier;
-}
-
 class _MainAppState extends State<MainApp> {
-  bool _isDarkMode = false;
   final FlutterLocalization _localization = FlutterLocalization.instance;
 
-  Future<void> toggleTheme() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isDarkMode = !_isDarkMode;
-      prefs.setBool('isDarkMode', _isDarkMode);
-    });
-  }
+  late AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSubscription;
 
   @override
   void initState() {
     super.initState();
-    ThemeManager.themeNotifier = this;
-    _loadThemePreference();
 
     _localization.init(mapLocales: [const MapLocale('en', AppLocale.en), const MapLocale('es', AppLocale.es)], initLanguageCode: 'es');
     _localization.onTranslatedLanguage = _onLanguageChanged;
+
+    // Escuchamos el notifier de tema para actualizar el MaterialApp
+    // sin recrearlo (así el Navigator no se reinicia).
+    appThemeNotifier.addListener(_onThemeChanged);
+
+    _initDeepLinks();
+  }
+
+  void _onThemeChanged() => setState(() {});
+
+  Future<void> _initDeepLinks() async {
+    _appLinks = AppLinks();
+
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleDeepLink(initialUri);
+      }
+    } catch (e) {
+      debugPrint("Error getting initial link: $e");
+    }
+
+    _linkSubscription = _appLinks.uriLinkStream.listen(
+      (Uri? uri) {
+        if (uri != null) {
+          _handleDeepLink(uri);
+        }
+      },
+      onError: (err) {
+        debugPrint("Error listening to link: $err");
+      },
+    );
+  }
+
+  void _handleDeepLink(Uri uri) {
+    if (uri.scheme == 'primware' && uri.host == 'login') {
+      navigatorKey.currentState?.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginPage()), (route) => false);
+    }
+  }
+
+  @override
+  void dispose() {
+    appThemeNotifier.removeListener(_onThemeChanged);
+    _linkSubscription?.cancel();
+    super.dispose();
   }
 
   void _onLanguageChanged(Locale? locale) {
     setState(() {});
   }
 
-  Future<void> _loadThemePreference() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isDarkMode = prefs.getBool('isDarkMode') ?? false;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(debugShowCheckedModeBanner: false, title: Base.title, theme: _isDarkMode ? AppThemes.darkTheme : AppThemes.lightTheme, supportedLocales: _localization.supportedLocales, localizationsDelegates: _localization.localizationsDelegates, locale: _localization.currentLocale, home: const LoginPage());
+    return CircularRevealOverlay(
+      child: MaterialApp(
+        navigatorKey: navigatorKey,
+        debugShowCheckedModeBanner: false,
+        title: Base.title,
+        theme: appThemeNotifier.value,
+        supportedLocales: _localization.supportedLocales,
+        localizationsDelegates: _localization.localizationsDelegates,
+        locale: _localization.currentLocale,
+        home: const LoginPage(),
+        builder: (context, child) => CustomUpgradeAlert(
+          navigatorKey: navigatorKey,
+          upgrader: Upgrader(languageCode: _localization.currentLocale?.languageCode ?? 'es'),
+          child: Stack(children: [if (child != null) child, const ProductSyncOverlay(), const BPartnerSyncOverlay()]),
+        ),
+      ),
+    );
   }
 }

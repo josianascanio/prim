@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:http/http.dart';
@@ -8,44 +9,82 @@ import '../../../API/endpoint.dart';
 import 'dart:convert';
 import '../../../API/token.api.dart';
 import '../../Auth/auth_funtions.dart';
+import 'history_search_criteria.dart';
+import 'order_history_repository.dart';
+import '../product/product_repository.dart';
+import '../bpartner/bpartner_repository.dart';
 
-Future<List<Map<String, dynamic>>> fetchBPartner({required BuildContext context, String? searchTerm = ''}) async {
+int? resolveEffectivePriceListID({
+  required bool isPOS,
+  required int? posPriceListID,
+  int? bPartnerPriceListID,
+}) {
+  if (isPOS) return posPriceListID;
+  return bPartnerPriceListID ?? posPriceListID;
+}
+
+Map<String, dynamic> buildPriceListReference({
+  required bool isPOS,
+  required int? posPriceListID,
+  int? bPartnerPriceListID,
+}) {
+  final priceListID = resolveEffectivePriceListID(
+    isPOS: isPOS,
+    posPriceListID: posPriceListID,
+    bPartnerPriceListID: bPartnerPriceListID,
+  );
+  return priceListID != null ? {'id': priceListID} : {'identifier': 'Standard'};
+}
+
+Future<List<Map<String, dynamic>>> fetchBPartner({
+  required BuildContext context,
+  String? searchTerm = '',
+}) async {
   try {
-    await usuarioAuth(context: context);
-    final filterQuery =
-        'IsCustomer eq true${searchTerm!.isNotEmpty ? ' and (contains(tolower(Name), \'${searchTerm.toLowerCase()}\') or contains(tolower(TaxID), \'${searchTerm.toLowerCase()}\'))' : ''}';
-
-    final response = await get(
-      Uri.parse('${EndPoints.cBPartner}?\$filter=$filterQuery&\$expand=AD_User,C_BPartner_Location'),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+    final page = await BPartnerRepository.instance.searchCustomers(
+      context: context,
+      searchTerm: searchTerm ?? '',
     );
-
-    if (response.statusCode == 200) {
-      final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
-      final records = jsonResponse['records'] as List;
-      return records.map((record) {
-        return {
-          'id': record['id'],
-          'name': record['Name'],
-          'TaxID': record['TaxID'],
-          'dv': record['dv'],
-          'M_PriceList_ID': record['M_PriceList_ID']?['id'],
-          'TipoClienteFE': record['TipoClienteFE']?['id'],
-          'LCO_TaxIdType_ID': record['LCO_TaxIdType_ID']?['id'],
-          'LCO_TaxIdTypeName': record['LCO_TaxIdType_ID']?['identifier'],
-          'C_BP_Group_ID': record['C_BP_Group_ID']?['id'],
-          'AD_User_ID': record['AD_User']?[0]?['id'],
-          'email': record['AD_User']?[0]?['EMail'],
-          'C_BPartner_Location_ID': record['C_BPartner_Location']?[0]?['id'],
-          'locationName': record['C_BPartner_Location']?[0]?['Name'],
-        };
-      }).toList();
-    } else {
-      throw Exception('Error al cargar los terceros: ${response.statusCode}');
-    }
+    return page.records;
   } catch (e) {
-    CurrentLogMessage.add('Excepción al obtener terceros: $e', level: 'ERROR', tag: 'fetchBPartner');
+    CurrentLogMessage.add(
+      'Excepción al obtener terceros: $e',
+      level: 'ERROR',
+      tag: 'fetchBPartner',
+    );
     return [];
+  }
+}
+
+Future<bool> fetchBPartnerHasLocation({
+  required BuildContext context,
+  int? partnerId,
+}) async {
+  try {
+    final currentPartnerId = partnerId ?? POS.templatePartnerID;
+    if (currentPartnerId == null) {
+      return false;
+    }
+
+    final cached = await BPartnerRepository.instance.readById(currentPartnerId);
+    if (cached != null) {
+      unawaited(
+        BPartnerRepository.instance
+            .refreshById(context: context, id: currentPartnerId)
+            .then<void>((_) {})
+            .catchError((_) {}),
+      );
+      return cached['hasLocation'] == true;
+    }
+    final partner = await BPartnerRepository.instance.refreshById(context: context, id: currentPartnerId);
+    return partner?['hasLocation'] == true;
+  } catch (e) {
+    CurrentLogMessage.add(
+      'Excepción al validar ubicación del tercero: $e',
+      level: 'ERROR',
+      tag: 'fetchBPartnerHasLocation',
+    );
+    return false;
   }
 }
 
@@ -56,96 +95,46 @@ Future<List<Map<String, dynamic>>> fetchProductInPriceList({
   int? priceListID,
 }) async {
   try {
-    int? bpartnerPriceListVersionID = POS.priceListVersionID;
-    if (POS.priceListID == null) {
-      return [];
-    }
-
-    //? solo si no es modo POS y el tercero tiene un lista de precios asignada, se busca la versión de lista de precios para ese tercero, de lo contrario se asume que es la misma que la del POS o la estándar
-    if (priceListID != null && POS.isPOS == false) {
-      bpartnerPriceListVersionID = await getMPriceListVersion(priceListID);
-    }
-
-    String categoryFilter = '';
-    if (categoryID != null && categoryID.isNotEmpty) {
-      categoryFilter = ' and (${categoryID.map((id) => 'M_Product_Category_ID eq $id').join(' or ')})';
-    }
-    final filterQuery =
-        'IsSold eq true'
-        '${searchTerm!.isNotEmpty ? ' and (contains(tolower(Name), \'${searchTerm.toLowerCase()}\') or contains(tolower(SKU), \'${searchTerm.toLowerCase()}\') or contains(tolower(Value), \'${searchTerm.toLowerCase()}\'))' : ''}'
-        '$categoryFilter';
-    final url =
-        '${EndPoints.mProduct}?\$filter=$filterQuery&\$select=Value,Name,C_TaxCategory_ID,SKU,UPC,ProductType,M_Product_Category_ID&\$expand=M_ProductPrice(\$select=PriceStd,PriceList,M_PriceList_Version_ID;\$filter=M_PriceList_Version_ID eq $bpartnerPriceListVersionID)${POS.isPOS ? ',M_Storage(\$select=QtyOnHand,QtyReserved,M_Locator_ID;\$expand=M_Locator_ID(\$select=M_Warehouse_ID))' : ''}';
-    final response = await get(Uri.parse(url), headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!});
-
-    if (response.statusCode == 200) {
-      final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
-      final records = jsonResponse['records'] as List;
-
-      List<Map<String, dynamic>> productList = [];
-
-      for (var record in records) {
-        final taxCategoryID = record['C_TaxCategory_ID']?['id'];
-        if (taxCategoryID == null || record['M_ProductPrice'] == null) continue;
-
-        Map<String, dynamic>? assignedTax;
-
-        if (POS.principalTaxs.containsKey(taxCategoryID)) {
-          assignedTax = POS.principalTaxs[taxCategoryID];
-        }
-
-        double? qtyAvailable;
-        if (POS.isPOS && record['M_Storage'] != null) {
-          double sum = 0;
-          final storages = record['M_Storage'] as List;
-          for (final storage in storages) {
-            final locator = storage['M_Locator_ID'];
-            final wh = locator != null ? locator['M_Warehouse_ID'] : null;
-            final whId = wh != null ? wh['id'] : null;
-            if (whId != null && POS.warehouseID != null && whId == POS.warehouseID) {
-              final onHand = (storage['QtyOnHand'] ?? 0).toDouble();
-
-              sum += onHand;
-            }
-          }
-          qtyAvailable = sum;
-        } else {
-          qtyAvailable = null;
-        }
-
-        productList.add({
-          'id': record['id'],
-          'name': record['Name'],
-          'value': record['Value'],
-          'sku': record['SKU'],
-          'upc': record['UPC'],
-          'category': record['M_Product_Category_ID'] != null ? record['M_Product_Category_ID']['id'] : null,
-          'price': record['M_ProductPrice'] != null && record['M_ProductPrice'].isNotEmpty ? record['M_ProductPrice'][0]['PriceStd'] : null,
-          'priceList': record['M_ProductPrice'] != null && record['M_ProductPrice'].isNotEmpty
-              ? record['M_ProductPrice'][0]['PriceList']
-              : null,
-          'C_TaxCategory_ID': taxCategoryID,
-          'tax': assignedTax,
-          'ProductType': record['ProductType']['id'],
-          'QtyAvailable': qtyAvailable,
-        });
-      }
-
-      return productList;
-    } else {
-      throw Exception('Error al cargar los productos: ${response.statusCode}');
-    }
+    final page = await ProductRepository.instance.getPage(
+      searchTerm: searchTerm ?? '',
+      categoryIDs: categoryID ?? const [],
+      partnerPriceListID: priceListID,
+    );
+    return page.records;
   } catch (e) {
-    CurrentLogMessage.add('Excepción al obtener productos: $e', level: 'ERROR', tag: 'fetchProductInPriceList');
+    CurrentLogMessage.add(
+      'Excepción al obtener productos: $e',
+      level: 'ERROR',
+      tag: 'fetchProductInPriceList',
+    );
     return [];
   }
 }
+
+Future<ProductPage> fetchProductPage({
+  int pageIndex = 0,
+  List<int> categoryID = const [],
+  String searchTerm = '',
+  int? priceListID,
+  bool preferCache = true,
+  bool waitForStock = false,
+}) => ProductRepository.instance.getPage(
+  pageIndex: pageIndex,
+  searchTerm: searchTerm,
+  categoryIDs: categoryID,
+  partnerPriceListID: priceListID,
+  preferCache: preferCache,
+  waitForStock: waitForStock,
+);
 
 Future<List<Map<String, dynamic>>> fetchTax() async {
   try {
     final response = await get(
       Uri.parse(EndPoints.cTax),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
     );
 
     if (response.statusCode == 200) {
@@ -165,7 +154,11 @@ Future<List<Map<String, dynamic>>> fetchTax() async {
       throw Exception('Error al cargar los impuestos: ${response.statusCode}');
     }
   } catch (e) {
-    CurrentLogMessage.add('Excepción al obtener impuesto: $e', level: 'ERROR', tag: 'fetchTax');
+    CurrentLogMessage.add(
+      'Excepción al obtener impuesto: $e',
+      level: 'ERROR',
+      tag: 'fetchTax',
+    );
     return [];
   }
 }
@@ -174,7 +167,10 @@ Future<List<Map<String, dynamic>>> fetctSalesRep() async {
   try {
     final response = await get(
       Uri.parse(EndPoints.salesRep),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
     );
 
     if (response.statusCode == 200) {
@@ -196,10 +192,16 @@ Future<List<Map<String, dynamic>>> fetctSalesRep() async {
       }
       return reps;
     } else {
-      throw Exception('Error al cargar los representantes comerciales: ${response.statusCode}');
+      throw Exception(
+        'Error al cargar los representantes comerciales: ${response.statusCode}',
+      );
     }
   } catch (e) {
-    CurrentLogMessage.add('Excepción al obtener los representantes comerciales: $e', level: 'ERROR', tag: 'fetctSalesRep');
+    CurrentLogMessage.add(
+      'Excepción al obtener los representantes comerciales: $e',
+      level: 'ERROR',
+      tag: 'fetctSalesRep',
+    );
     return [];
   }
 }
@@ -207,6 +209,7 @@ Future<List<Map<String, dynamic>>> fetctSalesRep() async {
 Future<Map<String, dynamic>> postInvoice({
   required int cBPartnerID,
   required List<Map<String, dynamic>> invoiceLines,
+  required List<Map<String, dynamic>> discounts,
   required List<Map<String, dynamic>> payments,
   required BuildContext context,
   required String docAction,
@@ -215,12 +218,23 @@ Future<Map<String, dynamic>> postInvoice({
   int? doctypeID,
   int? orderId,
   int? priceListID,
+  int? sourceOrderId,
 }) async {
   try {
+    if (discounts.isNotEmpty &&
+        (POS.discountChargeID == null ||
+            POS.discountTaxID == null ||
+            POS.discountTaxRate == null)) {
+      const message =
+          'No se puede procesar la orden: el POS no tiene configurado el charge o impuesto de descuento.';
+      CurrentLogMessage.add(message, level: 'ERROR', tag: 'postInvoice');
+      return {'success': false, 'message': message};
+    }
+
     await usuarioAuth(context: context);
 
     final orderLines = invoiceLines.map((line) {
-      return {
+      return <String, dynamic>{
         "M_Product_ID": {"id": line['M_Product_ID']},
         "QtyEntered": line['Quantity'],
         "QtyOrdered": line['Quantity'],
@@ -229,6 +243,18 @@ Future<Map<String, dynamic>> postInvoice({
         "PriceEntered": line['Price'],
         "C_Tax_ID": {"id": line['C_Tax_ID']},
         "Description": line['Description'] ?? '',
+      };
+    }).toList();
+
+    final discountLines = discounts.map((discount) {
+      return {
+        "C_Charge_ID": {"id": POS.discountChargeID},
+        "C_Tax_ID": {"id": POS.discountTaxID},
+        "QtyEntered": -1,
+        "QtyOrdered": -1,
+        "PriceActual": discount['Amount'],
+        "PriceEntered": discount['Amount'],
+        "IsGlobalDiscount": true,
       };
     }).toList();
 
@@ -246,7 +272,9 @@ Future<Map<String, dynamic>> postInvoice({
       "M_Warehouse_ID": {"id": Token.warehouseID},
       "C_DocTypeTarget_ID": doctypeID != null
           ? {"id": doctypeID}
-          : (isRefund ? POS.docTypeRefundID : POS.docTypeID ?? {"identifier": "POS Order"}),
+          : (isRefund
+                ? POS.docTypeRefundID
+                : POS.docTypeID ?? {"identifier": "POS Order"}),
       "SalesRep_ID": {"id": salesRepID},
       "DeliveryRule": "A",
       "DeliveryViaRule": "P",
@@ -260,9 +288,15 @@ Future<Map<String, dynamic>> postInvoice({
                 ? "M" //? Múltiples Medios de Pago
                 : "B" //? Caja de Punto de Venta
           : "P", //? Con Término de Pago
-      "M_PriceList_ID": priceListID != null ? {"id": priceListID} : (POS.priceListID ?? {"identifier": "Standard"}),
+      "M_PriceList_ID": buildPriceListReference(
+        isPOS: POS.isPOS,
+        posPriceListID: POS.priceListID,
+        bPartnerPriceListID: priceListID,
+      ),
       "IsSOTrx": true,
-      "order-line": orderLines,
+      if (isRefund && sourceOrderId != null)
+        "Ref_Order_ID": {"id": sourceOrderId},
+      "order-line": [...orderLines, ...discountLines],
       if (POSTenderType.isMultiPayment) "pos-payment": posPayments,
       "doc-action": docAction,
     };
@@ -273,67 +307,125 @@ Future<Map<String, dynamic>> postInvoice({
     if (orderId != null) {
       orderResponse = await put(
         Uri.parse('${Base.baseURL}/api/v1/windows/sales-order/$orderId'),
-        headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': Token.auth!,
+        },
         body: jsonEncode(orderData),
       );
     } else {
       orderResponse = await post(
         Uri.parse('${Base.baseURL}/api/v1/windows/sales-order'),
-        headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': Token.auth!,
+        },
         body: jsonEncode(orderData),
       );
     }
 
     // iDempiere devuelve 201 al crear (POST) y 200 al actualizar (PUT)
     if (orderResponse.statusCode != 201 && orderResponse.statusCode != 200) {
-      CurrentLogMessage.add('Error al procesar la orden: ${orderResponse.body}', level: 'ERROR', tag: 'postInvoice');
+      CurrentLogMessage.add(
+        'Error al procesar la orden: ${orderResponse.body}',
+        level: 'ERROR',
+        tag: 'postInvoice',
+      );
 
-      return {'success': false, 'message': 'Error al guardar o actualizar la orden.'};
+      return {
+        'success': false,
+        'message': 'Error al guardar o actualizar la orden.',
+      };
     }
 
     Map<String, dynamic> jsonData = jsonDecode(orderResponse.body);
 
     return {'success': true, 'Record_ID': jsonData['id']};
   } catch (e) {
-    CurrentLogMessage.add('Excepción general en postInvoice: $e', level: 'ERROR', tag: 'postInvoice');
+    CurrentLogMessage.add(
+      'Excepción general en postInvoice: $e',
+      level: 'ERROR',
+      tag: 'postInvoice',
+    );
     return {'success': false, 'message': 'Excepción inesperada: $e'};
   }
 }
 
-Future<Map<String, dynamic>?> fetchOrderById({required int orderId, required BuildContext context}) async {
+Future<Map<String, dynamic>?> fetchOrderById({
+  required int orderId,
+  required BuildContext context,
+}) async {
   try {
     final response = await get(
       Uri.parse(
-        '${EndPoints.cOrder}?\$filter=C_Order_ID eq $orderId&\$expand=C_OrderLine(\$orderby=Created;\$expand=C_Tax_ID),Bill_Location_ID,C_BPartner_ID,Bill_User_ID,C_POSPayment',
+        '${EndPoints.cOrder}?\$filter=C_Order_ID eq $orderId&\$expand=C_OrderLine(\$orderby=Created;\$expand=C_Tax_ID,M_Product_ID,C_Charge_ID),Bill_Location_ID,C_BPartner_ID,Bill_User_ID,C_POSPayment,C_DocTypeTarget_ID,Ref_Order_ID,C_Invoice(\$select=C_Invoice_ID,RelatedInvoice_ID,DocStatus,C_DocType_ID)',
       ),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
     );
 
     if (response.statusCode == 200) {
-      Map<String, dynamic> responseData = json.decode(utf8.decode(response.bodyBytes));
+      Map<String, dynamic> responseData = json.decode(
+        utf8.decode(response.bodyBytes),
+      );
       final record = responseData['records'][0];
 
-      return {
+      final normalized = <String, dynamic>{
         'id': record['id'],
+        'AD_Org_ID': _referenceId(record['AD_Org_ID']),
         'Created': record['Created'],
         'DocumentNo': record['DocumentNo'],
         'DateOrdered': record['DateOrdered'],
         'GrandTotal': record['GrandTotal'],
         'TotalLines': record['TotalLines'],
+        'refOrderId': _referenceId(record['Ref_Order_ID']),
+        'DocStatus': record['DocStatus'] is Map
+            ? record['DocStatus']['id']
+            : record['DocStatus'],
         'bpartner': {
           'id': record['C_BPartner_ID']?['id'],
           'name': record['C_BPartner_ID']?['Name'],
-          'location': record['Bill_Location_ID']?['C_Location_ID']?['identifier'],
+          'location':
+              record['Bill_Location_ID']?['C_Location_ID']?['identifier'],
           'taxID': record['C_BPartner_ID']?['TaxID'],
           'phone': record['Bill_User_ID']?['Phone'],
         },
-        'doctypetarget': {'id': record['C_DocTypeTarget_ID']?['id'], 'name': record['C_DocTypeTarget_ID']?['identifier']},
-        'SalesRep_ID': {'id': record['SalesRep_ID']?['id'], 'name': record['SalesRep_ID']?['identifier']},
+        'doctypetarget': {
+          'id': record['C_DocTypeTarget_ID']?['id'],
+          'name':
+              record['C_DocTypeTarget_ID']?['Name'] ??
+              record['C_DocTypeTarget_ID']?['identifier'],
+          'subtype': record['C_DocTypeTarget_ID']?['DocSubTypeSO'],
+        },
+        'SalesRep_ID': {
+          'id': record['SalesRep_ID']?['id'],
+          'name': record['SalesRep_ID']?['identifier'],
+        },
         'C_OrderLine': record['C_OrderLine'] ?? [],
+        'C_Invoice': record['C_Invoice'] ?? [],
         'payments': record['C_POSPayment'] ?? [],
       };
+      try {
+        normalized['hasActiveReturn'] = await hasActiveReturnForOrder(
+          orderId: orderId,
+          invoices: normalized['C_Invoice'] as List,
+        );
+      } catch (error) {
+        CurrentLogMessage.add(
+          'No se pudo enriquecer la orden $orderId con devoluciones: $error',
+          level: 'WARNING',
+          tag: 'fetchActiveReturnOrderIds',
+        );
+        normalized['hasActiveReturn'] = false;
+      }
+      await OrderHistoryRepository.instance.upsertOrder(normalized);
+      return normalized;
     } else {
-      debugPrint('${AppLocale.fetchOrderError.getString(context)} ${response.body}');
+      debugPrint(
+        '${AppLocale.fetchOrderError.getString(context)} ${response.body}',
+      );
       return null;
     }
   } catch (e) {
@@ -342,67 +434,383 @@ Future<Map<String, dynamic>?> fetchOrderById({required int orderId, required Bui
   }
 }
 
-Future<List<Map<String, dynamic>>> fetchOrders({required BuildContext context, String? filter, bool onlyMyOrders = true}) async {
-  try {
-    await usuarioAuth(context: context);
+bool _isActiveReturnStatus(dynamic value) {
+  final status = value is Map ? value['id']?.toString() : value?.toString();
+  return status != 'VO' && status != 'RE';
+}
 
-    filter = onlyMyOrders == true
-        ? 'SalesRep_ID eq ${UserData.id} and contains(DocumentNo, \'$filter\') and IsSOTrx eq true'
-        : 'contains(DocumentNo, \'$filter\') and IsSOTrx eq true';
+int? _referenceId(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is Map) return _referenceId(value['id']);
+  return int.tryParse(value?.toString() ?? '');
+}
 
+String? _returnDocTypeCacheKey;
+Set<int>? _returnDocTypeIds;
+
+Future<Set<int>> fetchReturnInvoiceDocTypeIds() async {
+  final cacheKey = '${Base.baseURL}|${Token.client}|${Token.rol}';
+  if (_returnDocTypeCacheKey == cacheKey && _returnDocTypeIds != null) {
+    return _returnDocTypeIds!;
+  }
+
+  final response = await get(
+    Uri.parse(
+      '${EndPoints.cDocType}?\$select=C_DocType_ID,DocBaseType'
+      '&\$filter=DocBaseType eq \'ARC\' and IsSOTrx eq true',
+    ),
+    headers: {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Authorization': Token.auth!,
+    },
+  );
+  if (response.statusCode != 200) {
+    throw Exception(
+      'No se pudieron consultar los tipos de documento de devolución (${response.statusCode}).',
+    );
+  }
+
+  final records =
+      (json.decode(utf8.decode(response.bodyBytes))['records'] as List?) ??
+      const [];
+  final ids = records
+      .whereType<Map>()
+      .map((record) => _referenceId(record['id'] ?? record['C_DocType_ID']))
+      .whereType<int>()
+      .toSet();
+  _returnDocTypeCacheKey = cacheKey;
+  _returnDocTypeIds = ids;
+  return ids;
+}
+
+bool _isReturnOrderRecord(Map record) {
+  final docType = record['C_DocTypeTarget_ID'];
+  if (docType is! Map) return false;
+  final subtype = docType['DocSubTypeSO'];
+  final subtypeCode = subtype is Map ? subtype['id'] : subtype;
+  final docTypeId = _referenceId(docType);
+  return subtypeCode?.toString() == 'RM' ||
+      (POS.docTypeRefundID != null && docTypeId == POS.docTypeRefundID);
+}
+
+Future<Set<int>> _fetchReferencedReturnOrderIds(Set<int> orderIds) async {
+  if (orderIds.isEmpty) return <int>{};
+  final referenceFilter = orderIds
+      .map((orderId) => 'Ref_Order_ID eq $orderId')
+      .join(' or ');
+  final result = <int>{};
+  var skip = 0;
+  var rowCount = 0;
+  do {
     final response = await get(
       Uri.parse(
-        '${EndPoints.cOrder}?\$filter=$filter&\$orderby=DateOrdered desc&\$expand=C_OrderLine(\$orderby=Created;\$expand=C_Tax_ID),Bill_Location_ID,C_BPartner_ID,Bill_User_ID,C_POSPayment,C_DocTypeTarget_ID,C_Invoice(\$select=RelatedInvoice_ID,DocStatus)',
+        '${EndPoints.cOrder}?\$top=100&\$skip=$skip&\$expand=C_DocTypeTarget_ID'
+        '&\$filter=($referenceFilter)',
       ),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
     );
-
-    if (response.statusCode == 200) {
-      final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
-      final List records = jsonResponse['records'];
-
-      return records.map((record) {
-        return {
-          'id': record['id'],
-          'Created': record['Created'],
-          'DocumentNo': record['DocumentNo'],
-          'DateOrdered': record['DateOrdered'],
-          'GrandTotal': record['GrandTotal'],
-          'TotalLines': record['TotalLines'],
-          'bpartner': {
-            'id': record['C_BPartner_ID']?['id'],
-            'name': record['C_BPartner_ID']?['Name'],
-            'location': record['Bill_Location_ID']?['C_Location_ID']?['identifier'],
-            'taxID': record['C_BPartner_ID']?['TaxID'],
-            'phone': record['Bill_User_ID']?['Phone'],
-          },
-          'doctypetarget': {
-            'id': record['C_DocTypeTarget_ID']?['id'],
-            'name': record['C_DocTypeTarget_ID']?['Name'],
-            'subtype': record['C_DocTypeTarget_ID']?['DocSubTypeSO'], // WR orden de venta
-          },
-          'SalesRep_ID': {'id': record['SalesRep_ID']?['id'], 'name': record['SalesRep_ID']?['identifier']},
-          'C_OrderLine': record['C_OrderLine'] ?? [],
-          'C_Invoice': record['C_Invoice'] ?? [],
-          'payments': record['C_POSPayment'] ?? [],
-          'DocStatus': record['DocStatus']['id'],
-        };
-      }).toList();
-    } else {
-      debugPrint('Error al obtener órdenes: ${response.body}');
-      return [];
+    if (response.statusCode != 200) {
+      CurrentLogMessage.add(
+        'Validación de órdenes de devolución ${response.statusCode}: ${response.body}',
+        level: 'ERROR',
+        tag: 'fetchActiveReturnOrderIds',
+      );
+      throw Exception(
+        'No se pudieron validar las órdenes de devolución (${response.statusCode}).',
+      );
     }
-  } catch (e) {
-    debugPrint('Error de red en fetchOrders: $e');
-    return [];
+
+    final decoded = json.decode(utf8.decode(response.bodyBytes));
+    final records = (decoded['records'] as List?) ?? const [];
+    rowCount =
+        int.tryParse((decoded['row-count'] ?? records.length).toString()) ??
+        records.length;
+    for (final record in records.whereType<Map>()) {
+      final sourceOrderId = _referenceId(record['Ref_Order_ID']);
+      if (sourceOrderId != null &&
+          orderIds.contains(sourceOrderId) &&
+          _isReturnOrderRecord(record) &&
+          _isActiveReturnStatus(record['DocStatus'])) {
+        result.add(sourceOrderId);
+      }
+    }
+    if (records.isEmpty) break;
+    skip += records.length;
+  } while (skip < rowCount);
+  return result;
+}
+
+Future<Set<int>> fetchActiveReturnOrderIds(
+  Iterable<Map<String, dynamic>> orders,
+) async {
+  final orderList = orders.toList();
+  final orderIds = orderList
+      .map((order) => _referenceId(order['id'] ?? order['C_Order_ID']))
+      .whereType<int>()
+      .toSet();
+  if (orderIds.isEmpty) return <int>{};
+
+  final returnDocTypeIds = await fetchReturnInvoiceDocTypeIds();
+  final result = await _fetchReferencedReturnOrderIds(orderIds);
+  final invoiceToOrder = <int, int>{};
+  for (final order in orderList) {
+    final orderId = _referenceId(order['id'] ?? order['C_Order_ID']);
+    if (orderId == null) continue;
+    final invoices = order['C_Invoice'];
+    if (invoices is! List) continue;
+    for (final invoice in invoices.whereType<Map>()) {
+      final invoiceId = _referenceId(invoice['id'] ?? invoice['C_Invoice_ID']);
+      final docTypeId = _referenceId(invoice['C_DocType_ID']);
+      final isReturn =
+          docTypeId != null && returnDocTypeIds.contains(docTypeId);
+      if (!isReturn && invoiceId != null) {
+        invoiceToOrder[invoiceId] = orderId;
+      }
+    }
   }
+
+  if (invoiceToOrder.isNotEmpty) {
+    final relatedInvoiceFilter = invoiceToOrder.keys
+        .map((invoiceId) => 'RelatedInvoice_ID eq $invoiceId')
+        .join(' or ');
+    final invoiceResponse = await get(
+      Uri.parse(
+        '${EndPoints.cInvoice}?\$select=RelatedInvoice_ID,DocStatus,C_DocType_ID&\$filter='
+        '($relatedInvoiceFilter)',
+      ),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
+    );
+    if (invoiceResponse.statusCode != 200) {
+      CurrentLogMessage.add(
+        'Validación de devoluciones ${invoiceResponse.statusCode}: ${invoiceResponse.body}',
+        level: 'ERROR',
+        tag: 'fetchActiveReturnOrderIds',
+      );
+      throw Exception(
+        'No se pudo validar si la factura tiene devoluciones (${invoiceResponse.statusCode}).',
+      );
+    }
+    final invoiceRecords =
+        (json.decode(utf8.decode(invoiceResponse.bodyBytes))['records']
+            as List?) ??
+        const [];
+    for (final record in invoiceRecords.whereType<Map>()) {
+      final originalInvoiceId = _referenceId(record['RelatedInvoice_ID']);
+      final orderId = invoiceToOrder[originalInvoiceId];
+      final docTypeId = _referenceId(record['C_DocType_ID']);
+      if (orderId != null &&
+          docTypeId != null &&
+          returnDocTypeIds.contains(docTypeId) &&
+          _isActiveReturnStatus(record['DocStatus'])) {
+        result.add(orderId);
+      }
+    }
+  }
+  return result;
+}
+
+Future<bool> hasActiveReturnForOrder({
+  required int orderId,
+  List<dynamic> invoices = const [],
+}) async {
+  var sourceInvoices = invoices;
+  if (sourceInvoices.isEmpty) {
+    final response = await get(
+      Uri.parse(
+        '${EndPoints.cInvoice}?\$select=C_Invoice_ID,RelatedInvoice_ID,DocStatus,C_DocType_ID'
+        '&\$filter=C_Order_ID eq $orderId',
+      ),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+        'No se pudieron consultar las facturas de la orden (${response.statusCode}).',
+      );
+    }
+    sourceInvoices =
+        (json.decode(utf8.decode(response.bodyBytes))['records'] as List?) ??
+        const [];
+  }
+  final ids = await fetchActiveReturnOrderIds([
+    {'id': orderId, 'C_Invoice': sourceInvoices},
+  ]);
+  return ids.contains(orderId);
+}
+
+Future<Set<int>> _fetchHistoryCustomerIds(String searchText) async {
+  final escaped = escapeODataText(searchText.toLowerCase());
+  final ids = <int>{};
+  var skip = 0;
+  var totalCount = 0;
+  do {
+    final response = await get(
+      Uri.parse(
+        '${EndPoints.cBPartner}?\$skip=$skip&\$select=C_BPartner_ID'
+        '&\$filter=IsCustomer eq true and '
+        "(contains(tolower(Name), '$escaped') or contains(tolower(TaxID), '$escaped'))",
+      ),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+        'No se pudieron buscar los terceros (${response.statusCode}).',
+      );
+    }
+    final decoded = json.decode(utf8.decode(response.bodyBytes));
+    final records = (decoded['records'] as List?) ?? const [];
+    for (final record in records.whereType<Map>()) {
+      final id = int.tryParse(
+        (record['id'] ?? record['C_BPartner_ID'] ?? '').toString(),
+      );
+      if (id != null) ids.add(id);
+    }
+    totalCount =
+        int.tryParse((decoded['row-count'] ?? records.length).toString()) ??
+        records.length;
+    if (records.isEmpty) break;
+    skip += records.length;
+  } while (skip < totalCount);
+  return ids;
+}
+
+Future<PagedResult<Map<String, dynamic>>> fetchOrdersPage({
+  required BuildContext context,
+  HistorySearchCriteria criteria = const HistorySearchCriteria(),
+  int top = 50,
+  int skip = 0,
+}) async {
+  await usuarioAuth(context: context);
+  final filters = <String>['IsSOTrx eq true'];
+  if (criteria.onlyMyMovements) {
+    filters.add('SalesRep_ID eq ${UserData.id}');
+  }
+  if (criteria.organizationId != null) {
+    filters.add('AD_Org_ID eq ${criteria.organizationId}');
+  }
+  if (criteria.docStatus != null) {
+    filters.add("DocStatus eq '${escapeODataText(criteria.docStatus!)}'");
+  }
+  if (criteria.documentText.trim().isNotEmpty) {
+    final document = escapeODataText(criteria.documentText.toLowerCase());
+    filters.add("contains(tolower(DocumentNo), '$document')");
+  }
+  if (criteria.customerText.trim().isNotEmpty) {
+    final customerIds = await _fetchHistoryCustomerIds(criteria.customerText);
+    if (customerIds.isEmpty) {
+      return PagedResult(
+        records: const [],
+        rowCount: 0,
+        recordsSize: 0,
+        skipRecords: skip,
+      );
+    }
+    filters.add('C_BPartner_ID in (${customerIds.join(',')})');
+  }
+
+  final allRecords = <Map>[];
+  var totalCount = 0;
+  var recordsSize = 0;
+  var skipRecords = skip;
+  {
+    final response = await get(
+      Uri.parse(
+        '${EndPoints.cOrder}?\$top=$top&\$skip=$skip&\$filter=${filters.join(' and ')}'
+        '&\$orderby=Created desc'
+        '&\$expand=C_OrderLine(\$orderby=Created;\$expand=C_Tax_ID,M_Product_ID,C_Charge_ID),Bill_Location_ID,C_BPartner_ID,Bill_User_ID,C_POSPayment,C_DocTypeTarget_ID,Ref_Order_ID,C_Invoice(\$select=C_Invoice_ID,RelatedInvoice_ID,DocStatus,C_DocType_ID)',
+      ),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+        'No se pudieron cargar las órdenes (${response.statusCode}).',
+      );
+    }
+    final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
+    final records =
+        (jsonResponse['records'] as List?)?.whereType<Map>().toList() ??
+        const <Map>[];
+    allRecords.addAll(records);
+    recordsSize =
+        int.tryParse(
+          (jsonResponse['records-size'] ?? records.length).toString(),
+        ) ??
+        records.length;
+    skipRecords =
+        int.tryParse((jsonResponse['skip-records'] ?? skip).toString()) ?? skip;
+    totalCount =
+        int.tryParse(
+          (jsonResponse['row-count'] ?? records.length).toString(),
+        ) ??
+        records.length;
+  }
+
+  final normalized = allRecords.map((record) {
+    return {
+      'id': record['id'],
+      'AD_Org_ID': _referenceId(record['AD_Org_ID']),
+      'Created': record['Created'],
+      'DocumentNo': record['DocumentNo'],
+      'DateOrdered': record['DateOrdered'],
+      'GrandTotal': record['GrandTotal'],
+      'TotalLines': record['TotalLines'],
+      'refOrderId': _referenceId(record['Ref_Order_ID']),
+      'bpartner': {
+        'id': record['C_BPartner_ID']?['id'],
+        'name': record['C_BPartner_ID']?['Name'],
+        'location': record['Bill_Location_ID']?['C_Location_ID']?['identifier'],
+        'taxID': record['C_BPartner_ID']?['TaxID'],
+        'phone': record['Bill_User_ID']?['Phone'],
+      },
+      'doctypetarget': {
+        'id': record['C_DocTypeTarget_ID']?['id'],
+        'name': record['C_DocTypeTarget_ID']?['Name'],
+        'subtype':
+            record['C_DocTypeTarget_ID']?['DocSubTypeSO'], // WR orden de venta
+      },
+      'SalesRep_ID': {
+        'id': record['SalesRep_ID']?['id'],
+        'name': record['SalesRep_ID']?['identifier'],
+      },
+      'C_OrderLine': record['C_OrderLine'] ?? [],
+      'C_Invoice': record['C_Invoice'] ?? [],
+      'payments': record['C_POSPayment'] ?? [],
+      'DocStatus': record['DocStatus']['id'],
+    };
+  }).toList();
+  return PagedResult(
+    records: normalized,
+    rowCount: totalCount,
+    recordsSize: recordsSize,
+    skipRecords: skipRecords,
+  );
 }
 
 Future<int?> _fetchCreditDocType() async {
   try {
     final response = await get(
-      Uri.parse('${EndPoints.cDocType}?\$filter=DocBaseType in (\'ARC\',\'APC\') and IsSOTrx eq true&\$select=Name'),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+      Uri.parse(
+        '${EndPoints.cDocType}?\$filter=DocBaseType in (\'ARC\',\'APC\') and IsSOTrx eq true&\$select=Name',
+      ),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
     );
 
     if (response.statusCode == 200) {
@@ -410,10 +818,16 @@ Future<int?> _fetchCreditDocType() async {
       final records = jsonResponse['records'] as List;
       return records[0]['id'];
     } else {
-      throw Exception('Error al cargar Tipo de Documento de Nota Crédito: ${response.statusCode}');
+      throw Exception(
+        'Error al cargar Tipo de Documento de Nota Crédito: ${response.statusCode}',
+      );
     }
   } catch (e) {
-    CurrentLogMessage.add('Error al cargar Tipo de Documento de Nota Crédito: $e', level: 'ERROR', tag: 'fetchPaymentMethods');
+    CurrentLogMessage.add(
+      'Error al cargar Tipo de Documento de Nota Crédito: $e',
+      level: 'ERROR',
+      tag: 'fetchPaymentMethods',
+    );
   }
   return null;
 }
@@ -432,38 +846,61 @@ Future<bool> createCreditMemo({required int cInvoiceID}) async {
 
     final response = await post(
       Uri.parse(Processes.createCreditMemo),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
       body: jsonEncode(body),
     );
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       return true;
     } else {
-      throw Exception('Error al ejecutar proceso Crear Nota Crédito: ${response.statusCode}');
+      throw Exception(
+        'Error al ejecutar proceso Crear Nota Crédito: ${response.statusCode}',
+      );
     }
   } catch (e) {
-    CurrentLogMessage.add('Error al ejecutar proceso Crear Nota Crédito:$e', level: 'ERROR', tag: 'createCreditMemo');
+    CurrentLogMessage.add(
+      'Error al ejecutar proceso Crear Nota Crédito:$e',
+      level: 'ERROR',
+      tag: 'createCreditMemo',
+    );
   }
   return false;
 }
 
 Future<Map<String, dynamic>> docComplete({required int cOrderID}) async {
   try {
-    final Map<String, dynamic> body = {"DocAction": "CO", "C_Order_ID": cOrderID};
+    final Map<String, dynamic> body = {
+      "DocAction": "CO",
+      "C_Order_ID": cOrderID,
+    };
 
     final response = await post(
       Uri.parse(Processes.orderExecuteDocAction),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
       body: jsonEncode(body),
     );
     if (response.statusCode == 200) {
       final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
-      return {"success": true, "isError": jsonResponse["isError"], "summary": jsonResponse["summary"]};
+      return {
+        "success": true,
+        "isError": jsonResponse["isError"],
+        "summary": jsonResponse["summary"],
+      };
     } else {
       throw Exception('Error al completar documento: ${response.statusCode}');
     }
   } catch (e) {
-    CurrentLogMessage.add('Error al completar documento:$e', level: 'ERROR', tag: 'docComplete');
+    CurrentLogMessage.add(
+      'Error al completar documento:$e',
+      level: 'ERROR',
+      tag: 'docComplete',
+    );
   }
   return {"success": false};
 }
@@ -474,17 +911,30 @@ Future<Map<String, dynamic>> syncFEProcess({required int cInvoiceID}) async {
 
     final response = await post(
       Uri.parse(Processes.syncFE),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
       body: jsonEncode(body),
     );
     if (response.statusCode == 200) {
       final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
-      return {"success": true, "isError": jsonResponse["isError"], "summary": jsonResponse["summary"]};
+      return {
+        "success": true,
+        "isError": jsonResponse["isError"],
+        "summary": jsonResponse["summary"],
+      };
     } else {
-      throw Exception('Error al sincronizar factura electrónica: ${response.statusCode}');
+      throw Exception(
+        'Error al sincronizar factura electrónica: ${response.statusCode}',
+      );
     }
   } catch (e) {
-    CurrentLogMessage.add('Error al sincronizar factura electrónica:$e', level: 'ERROR', tag: 'syncFE');
+    CurrentLogMessage.add(
+      'Error al sincronizar factura electrónica:$e',
+      level: 'ERROR',
+      tag: 'syncFE',
+    );
   }
   return {"success": false};
 }
@@ -492,8 +942,13 @@ Future<Map<String, dynamic>> syncFEProcess({required int cInvoiceID}) async {
 Future<List<Map<String, dynamic>>> fetchPaymentMethods() async {
   try {
     final response = await get(
-      Uri.parse('${EndPoints.cPOSTenderType}?\$select=Name,TenderType,Value&\$orderby=Value'),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+      Uri.parse(
+        '${EndPoints.cPOSTenderType}?\$select=Name,TenderType,Value&\$orderby=Value',
+      ),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
     );
 
     if (response.statusCode == 200) {
@@ -506,13 +961,24 @@ Future<List<Map<String, dynamic>>> fetchPaymentMethods() async {
           'tenderType': record['TenderType']?['identifier'] ?? 'Desconocido',
           'tenderTypeID': record['TenderType']?['id'],
           'isCash': record['TenderType']?['id'] == 'X',
+          'isRetireDiscount': record['TenderType']?['id'] == 'R',
+          'isGlobalDiscount': record['TenderType']?['id'] == 'G',
+          'isDiscount':
+              record['TenderType']?['id'] == 'R' ||
+              record['TenderType']?['id'] == 'G',
         };
       }).toList();
     } else {
-      throw Exception('Error al cargar métodos de pago: ${response.statusCode}');
+      throw Exception(
+        'Error al cargar métodos de pago: ${response.statusCode}',
+      );
     }
   } catch (e) {
-    CurrentLogMessage.add('Excepción al obtener métodos de pago: $e', level: 'ERROR', tag: 'fetchPaymentMethods');
+    CurrentLogMessage.add(
+      'Excepción al obtener métodos de pago: $e',
+      level: 'ERROR',
+      tag: 'fetchPaymentMethods',
+    );
     return [];
   }
 }
@@ -521,7 +987,10 @@ Future<List<Map<String, dynamic>>> fetchProductCategory() async {
   try {
     final response = await get(
       Uri.parse('${EndPoints.mProductCategory}?\$select=Name&\$orderby=Name'),
-      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Authorization': Token.auth!,
+      },
     );
 
     if (response.statusCode == 200) {
@@ -531,10 +1000,16 @@ Future<List<Map<String, dynamic>>> fetchProductCategory() async {
         return {'id': record['id'], 'name': record['Name']};
       }).toList();
     } else {
-      throw Exception('Error al cargar las categorias de los productos: ${response.statusCode}');
+      throw Exception(
+        'Error al cargar las categorias de los productos: ${response.statusCode}',
+      );
     }
   } catch (e) {
-    CurrentLogMessage.add('Excepción al obtener las categorias de los productos: $e', level: 'ERROR', tag: 'fetchProductCategory');
+    CurrentLogMessage.add(
+      'Excepción al obtener las categorias de los productos: $e',
+      level: 'ERROR',
+      tag: 'fetchProductCategory',
+    );
     return [];
   }
 }
@@ -542,7 +1017,9 @@ Future<List<Map<String, dynamic>>> fetchProductCategory() async {
 Future<void> fetchDocumentActions({required int docTypeID}) async {
   POS.documentActions.clear();
   final response = await get(
-    Uri.parse(GetDocumentActions(roleID: Token.rol!, docTypeID: docTypeID).endPoint),
+    Uri.parse(
+      GetDocumentActions(roleID: Token.rol!, docTypeID: docTypeID).endPoint,
+    ),
     headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
   );
 
@@ -586,7 +1063,11 @@ Future<void> fetchDocumentActions({required int docTypeID}) async {
 
     POS.documentActions = result;
   } else {
-    CurrentLogMessage.add('Error al obtener acciones de documento: ${response.statusCode}', level: 'ERROR', tag: 'fetchDocumentActions');
+    CurrentLogMessage.add(
+      'Error al obtener acciones de documento: ${response.statusCode}',
+      level: 'ERROR',
+      tag: 'fetchDocumentActions',
+    );
   }
 }
 
@@ -600,26 +1081,45 @@ Future<Map<String, dynamic>> showYappyQR({
   try {
     final Map<String, dynamic> openDeviceData = {
       "body": {
-        "device": {"id": Yappy.deviceId, "name": Yappy.deviceId, "user": Yappy.deviceId},
+        "device": {
+          "id": Yappy.deviceId,
+          "name": Yappy.deviceId,
+          "user": Yappy.deviceId,
+        },
         "group_id": Yappy.groupId,
       },
     };
 
     final Map<String, dynamic> generateQRData = {
       "body": {
-        "charge_amount": {"sub_total": subTotal, "tax": totalTax, "tip": 0, "discount": 0, "total": total},
-        if (docNoSequence != null && docNoSequence.isNotEmpty) "order_id": docNoSequence,
+        "charge_amount": {
+          "sub_total": subTotal,
+          "tax": totalTax,
+          "tip": 0,
+          "discount": 0,
+          "total": total,
+        },
+        if (docNoSequence != null && docNoSequence.isNotEmpty)
+          "order_id": docNoSequence,
       },
     };
 
     final deviceResponse = await post(
       Uri.parse(EndPoints.yappyDevice),
-      headers: {'Content-Type': 'application/json', 'api-key': Yappy.apiKey!, 'secret-key': Yappy.secretKey!},
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': Yappy.apiKey!,
+        'secret-key': Yappy.secretKey!,
+      },
       body: jsonEncode(openDeviceData),
     );
 
     if (deviceResponse.statusCode != 200) {
-      CurrentLogMessage.add('Error al abrir la caja de yappi: ${deviceResponse.body}', level: 'ERROR', tag: 'showYappyQR');
+      CurrentLogMessage.add(
+        'Error al abrir la caja de yappi: ${deviceResponse.body}',
+        level: 'ERROR',
+        tag: 'showYappyQR',
+      );
 
       return {'success': false, 'message': 'Error al abrir la caja de yappi.'};
     }
@@ -638,7 +1138,11 @@ Future<Map<String, dynamic>> showYappyQR({
     );
 
     if (qrResponse.statusCode != 200) {
-      CurrentLogMessage.add('Error al generar el QR de yappy: ${qrResponse.body}', level: 'ERROR', tag: 'showYappyQR');
+      CurrentLogMessage.add(
+        'Error al generar el QR de yappy: ${qrResponse.body}',
+        level: 'ERROR',
+        tag: 'showYappyQR',
+      );
 
       return {'success': false, 'message': 'Error al generar el QR de yappy.'};
     }
@@ -703,15 +1207,23 @@ Future<bool> cancelYappyTransaction({required String transactionId}) async {
       final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
 
       final status = jsonResponse['status']['code'];
-      CurrentLogMessage.add('Status de la cancelación: $status', level: 'INFO', tag: 'cancelYappyTransaction');
+      CurrentLogMessage.add(
+        'Status de la cancelación: $status',
+        level: 'INFO',
+        tag: 'cancelYappyTransaction',
+      );
       if (status == 'YP-0000' || status == 'YP-0016') {
         return true;
       } else {
-        debugPrint('Operacion para cancelar transacion fallida: ${response.body}');
+        debugPrint(
+          'Operacion para cancelar transacion fallida: ${response.body}',
+        );
         return false;
       }
     } else {
-      debugPrint('Operacion para cancelar transacion fallida: ${response.body}');
+      debugPrint(
+        'Operacion para cancelar transacion fallida: ${response.body}',
+      );
       return false;
     }
   } catch (e) {
@@ -724,7 +1236,10 @@ Future<int?> getDocNoSequenceID({required int recordID}) async {
   try {
     final response = await get(
       Uri.parse('${EndPoints.cDocType}?\$filter=C_DocType_ID eq $recordID'),
-      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': Token.auth!,
+      },
     );
 
     if (response.statusCode == 200) {
@@ -740,7 +1255,11 @@ Future<int?> getDocNoSequenceID({required int recordID}) async {
       );
     }
   } catch (e) {
-    CurrentLogMessage.add('Error en getDocNoSequenceID: $e', level: 'ERROR', tag: 'getDocNoSequenceID');
+    CurrentLogMessage.add(
+      'Error en getDocNoSequenceID: $e',
+      level: 'ERROR',
+      tag: 'getDocNoSequenceID',
+    );
   }
   return null;
 }
@@ -748,8 +1267,13 @@ Future<int?> getDocNoSequenceID({required int recordID}) async {
 Future<String?> getDocNoSequence({required int docNoSequenceID}) async {
   try {
     final response = await get(
-      Uri.parse('${EndPoints.adSequence}?\$filter=AD_Sequence_ID eq $docNoSequenceID'),
-      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
+      Uri.parse(
+        '${EndPoints.adSequence}?\$filter=AD_Sequence_ID eq $docNoSequenceID',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': Token.auth!,
+      },
     );
 
     if (response.statusCode == 200) {
@@ -765,7 +1289,11 @@ Future<String?> getDocNoSequence({required int docNoSequenceID}) async {
       );
     }
   } catch (e) {
-    CurrentLogMessage.add('Error en getDocNoSequence: $e', level: 'ERROR', tag: 'getDocNoSequence');
+    CurrentLogMessage.add(
+      'Error en getDocNoSequence: $e',
+      level: 'ERROR',
+      tag: 'getDocNoSequence',
+    );
   }
   return null;
 }

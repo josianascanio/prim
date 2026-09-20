@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../API/endpoint.dart';
 import '../../API/pos.api.dart';
 import '../../API/token.api.dart';
-import '../../main.dart';
 import '../../shared/toast_message.dart';
 import 'login_view.dart';
 import '../../API/user.api.dart';
@@ -17,17 +16,14 @@ import 'package:package_info_plus/package_info_plus.dart';
 Future<void> handle401(BuildContext context) async {
   Token.auth = null;
   Token.adOrgInfoUU = null;
+  POS.bankAccountID = null;
   UserData.rolName = null;
   UserData.imageBytes = null;
   claveController.clear();
   await _clearLastTokenGeneratedAt();
 
-  Navigator.push(context, MaterialPageRoute(builder: (context) => MainApp()));
-  ToastMessage.show(
-    context: context,
-    message: "Por su seguridad la sesión a expirado",
-    type: ToastType.warning,
-  );
+  Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginPage()), (route) => false);
+  ToastMessage.show(context: context, message: "Por su seguridad la sesión a expirado", type: ToastType.warning);
 }
 
 Future<void> _loadAppVersion() async {
@@ -40,10 +36,7 @@ const int _tokenReuseWindowMinutes = 40;
 
 Future<void> _saveLastTokenGeneratedAt() async {
   final prefs = await SharedPreferences.getInstance();
-  await prefs.setString(
-    _lastTokenGeneratedAtKey,
-    DateTime.now().toIso8601String(),
-  );
+  await prefs.setString(_lastTokenGeneratedAtKey, DateTime.now().toIso8601String());
 }
 
 Future<DateTime?> _getLastTokenGeneratedAt() async {
@@ -67,9 +60,7 @@ Future<bool> _canReuseCurrentToken() async {
     return false;
   }
 
-  final minutesSinceLastToken = DateTime.now()
-      .difference(lastGeneratedAt)
-      .inMinutes;
+  final minutesSinceLastToken = DateTime.now().difference(lastGeneratedAt).inMinutes;
   return minutesSinceLastToken < _tokenReuseWindowMinutes;
 }
 
@@ -78,11 +69,7 @@ Future<void> _clearLastTokenGeneratedAt() async {
   await prefs.remove(_lastTokenGeneratedAtKey);
 }
 
-Future<Map<String, dynamic>?> preAuth(
-  String usuario,
-  String clave,
-  BuildContext context,
-) async {
+Future<Map<String, dynamic>?> preAuth(String usuario, String clave, BuildContext context) async {
   try {
     if (usuario.isEmpty || clave.isEmpty) {
       return null;
@@ -90,11 +77,7 @@ Future<Map<String, dynamic>?> preAuth(
 
     final Map<String, dynamic> data = {"userName": usuario, "password": clave};
 
-    final response = await post(
-      Uri.parse(EndPoints.postUserAuth),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(data),
-    );
+    final response = await post(Uri.parse(EndPoints.postUserAuth), headers: {'Content-Type': 'application/json'}, body: jsonEncode(data));
 
     if (response.statusCode == 200) {
       final responseData = json.decode(response.body);
@@ -102,11 +85,7 @@ Future<Map<String, dynamic>?> preAuth(
 
       return responseData;
     } else {
-      CurrentLogMessage.add(
-        'preAuth Error: ${response.statusCode}, ${response.body}',
-        level: 'ERROR',
-        tag: 'preAuth',
-      );
+      CurrentLogMessage.add('preAuth Error: ${response.statusCode}, ${response.body}', level: 'ERROR', tag: 'preAuth');
     }
   } catch (e) {
     // print(e);
@@ -117,32 +96,20 @@ Future<Map<String, dynamic>?> preAuth(
   return null;
 }
 
-Future<List<Map<String, dynamic>>?> getRoles(
-  int clientId,
-  BuildContext context,
-) async {
+Future<List<Map<String, dynamic>>?> getRoles(int clientId, BuildContext context) async {
   try {
     final response = await get(
       Uri.parse(GetRol(clientID: clientId).endPoint),
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': Token.preAuth!,
-      },
+      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.preAuth!},
     );
 
     if (response.statusCode == 200) {
       final responseData = json.decode(utf8.decode(response.bodyBytes));
 
-      List<Map<String, dynamic>> roles = (responseData['roles'] as List)
-          .map((role) => {'id': role['id'], 'name': role['name']})
-          .toList();
+      List<Map<String, dynamic>> roles = (responseData['roles'] as List).map((role) => {'id': role['id'], 'name': role['name']}).toList();
       return roles;
     } else {
-      CurrentLogMessage.add(
-        'getRoles Error: ${response.statusCode}, ${response.body}',
-        level: 'ERROR',
-        tag: 'getRoles',
-      );
+      CurrentLogMessage.add('getRoles Error: ${response.statusCode}, ${response.body}', level: 'ERROR', tag: 'getRoles');
     }
   } catch (e) {
     if (e is ClientException) {
@@ -152,38 +119,21 @@ Future<List<Map<String, dynamic>>?> getRoles(
   return null;
 }
 
-Future<List<Map<String, dynamic>>?> getOrganizations(
-  int clientId,
-  int roleId,
-  BuildContext context,
-) async {
+Future<List<Map<String, dynamic>>?> getOrganizations(int clientId, int roleId, BuildContext context) async {
   try {
     final response = await get(
       Uri.parse(GetOrganization(rolID: roleId, clientID: clientId).endPoint),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.preAuth!,
-      },
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.preAuth!},
     );
 
     if (response.statusCode == 200) {
       final responseData = json.decode(response.body);
-      List<Map<String, dynamic>> organizations =
-          (responseData['organizations'] as List)
-              .map(
-                (organization) => {
-                  'id': organization['id'],
-                  'name': organization['name'],
-                },
-              )
-              .toList();
+      List<Map<String, dynamic>> organizations = (responseData['organizations'] as List)
+          .map((organization) => {'id': organization['id'], 'name': organization['name']})
+          .toList();
       return organizations;
     } else {
-      CurrentLogMessage.add(
-        'getOrganizations Error: ${response.statusCode}, ${response.body}',
-        level: 'ERROR',
-        tag: 'getOrganizations',
-      );
+      CurrentLogMessage.add('getOrganizations Error: ${response.statusCode}, ${response.body}', level: 'ERROR', tag: 'getOrganizations');
     }
   } catch (e) {
     if (e is ClientException) {
@@ -193,25 +143,11 @@ Future<List<Map<String, dynamic>>?> getOrganizations(
   return null;
 }
 
-Future<bool> getWarehouse({
-  required int clientId,
-  required int roleId,
-  required int organitaionId,
-  required BuildContext context,
-}) async {
+Future<bool> getWarehouse({required int clientId, required int roleId, required int organitaionId, required BuildContext context}) async {
   try {
     final response = await get(
-      Uri.parse(
-        GetWarehouse(
-          rolID: roleId,
-          clientID: clientId,
-          organizationID: organitaionId,
-        ).endPoint,
-      ),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.preAuth!,
-      },
+      Uri.parse(GetWarehouse(rolID: roleId, clientID: clientId, organizationID: organitaionId).endPoint),
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.preAuth!},
     );
 
     if (response.statusCode == 200) {
@@ -220,40 +156,28 @@ Future<bool> getWarehouse({
 
       return true;
     } else {
-      CurrentLogMessage.add(
-        'Error en getWarehouse: ${response.statusCode}, ${response.body}',
-        level: 'ERROR',
-        tag: 'getWarehouse',
-      );
+      CurrentLogMessage.add('Error en getWarehouse: ${response.statusCode}, ${response.body}', level: 'ERROR', tag: 'getWarehouse');
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Excepción en getWarehouse: $e',
-      level: 'ERROR',
-      tag: 'getWarehouse',
-    );
+    CurrentLogMessage.add('Excepción en getWarehouse: $e', level: 'ERROR', tag: 'getWarehouse');
   }
   return false;
 }
 
-Future<bool> usuarioAuth({required BuildContext context}) async {
+Future<bool> usuarioAuth({required BuildContext context, bool forceNewToken = false}) async {
   try {
     if (usuarioController.text.isEmpty || claveController.text.isEmpty) {
       return false;
     }
 
     //? Si han pasado 40 mins o mas, se solicita un nuevo token
-    if (await _canReuseCurrentToken()) {
+    // Si forceNewToken es true, ignoramos el caché (útil al cambiar de organización)
+    if (!forceNewToken && await _canReuseCurrentToken()) {
       return true;
     }
 
     if (Token.warehouseID == null) {
-      await getWarehouse(
-        clientId: Token.client!,
-        roleId: Token.rol!,
-        organitaionId: Token.organitation!,
-        context: context,
-      );
+      await getWarehouse(clientId: Token.client!, roleId: Token.rol!, organitaionId: Token.organitation!, context: context);
     }
 
     final Map<String, dynamic> data = {
@@ -268,11 +192,7 @@ Future<bool> usuarioAuth({required BuildContext context}) async {
       },
     };
 
-    final response = await post(
-      Uri.parse(EndPoints.postUserAuth),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(data),
-    );
+    final response = await post(Uri.parse(EndPoints.postUserAuth), headers: {'Content-Type': 'application/json'}, body: jsonEncode(data));
 
     if (response.statusCode == 200) {
       Token.auth = '${Token.tokenType} ${json.decode(response.body)["token"]}';
@@ -284,22 +204,17 @@ Future<bool> usuarioAuth({required BuildContext context}) async {
       await _loadChartIDs();
       POSTenderType.isMultiPayment = await _posTenderExists();
       await _loadAppVersion();
+      if (success) {
+        await UserData.saveToCache();
+      }
       return success;
     } else {
       await _clearLastTokenGeneratedAt();
-      CurrentLogMessage.add(
-        'usuarioAuth Error: ${response.statusCode}, ${response.body}',
-        level: 'ERROR',
-        tag: 'usuarioAuth',
-      );
+      CurrentLogMessage.add('usuarioAuth Error: ${response.statusCode}, ${response.body}', level: 'ERROR', tag: 'usuarioAuth');
     }
   } catch (e) {
     await _clearLastTokenGeneratedAt();
-    CurrentLogMessage.add(
-      'Excepción en usuarioAuth: $e',
-      level: 'ERROR',
-      tag: 'usuarioAuth',
-    );
+    CurrentLogMessage.add('Excepción en usuarioAuth: $e', level: 'ERROR', tag: 'usuarioAuth');
   }
   return false;
 }
@@ -308,16 +223,11 @@ Future<bool> _loadUserData(BuildContext context) async {
   try {
     final response = await get(
       Uri.parse(GetUserData(adUserID: UserData.id!).endPoint),
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': Token.auth!,
-      },
+      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
-      final userData = json.decode(
-        utf8.decode(response.bodyBytes),
-      )['records'][0];
+      final userData = json.decode(utf8.decode(response.bodyBytes))['records'][0];
 
       UserData.uu = userData['uid'];
       UserData.name = userData['Name'];
@@ -336,11 +246,7 @@ Future<bool> _loadUserData(BuildContext context) async {
       );
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Excepción en _loadUserData: $e',
-      level: 'ERROR',
-      tag: '_loadUserData',
-    );
+    CurrentLogMessage.add('Excepción en _loadUserData: $e', level: 'ERROR', tag: '_loadUserData');
   }
 
   return false;
@@ -349,13 +255,8 @@ Future<bool> _loadUserData(BuildContext context) async {
 Future<bool> _loadPOSPrinterData() async {
   try {
     final response = await get(
-      Uri.parse(
-        '${EndPoints.adOrgInfo}?\$filter=AD_Org_ID eq ${Token.organitation}&\$expand=C_Location_ID',
-      ),
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': Token.auth!,
-      },
+      Uri.parse('${EndPoints.adOrgInfo}?\$filter=AD_Org_ID eq ${Token.organitation}&\$expand=C_Location_ID'),
+      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
@@ -364,8 +265,8 @@ Future<bool> _loadPOSPrinterData() async {
       Token.adOrgInfoUU = record['uid']?.toString();
       POSPrinter.headerName = record['AD_Client_ID']?['identifier'];
       POSPrinter.headerAddress =
-          '${record['C_Location_ID']['Address1'] ?? ''}${record['C_Location_ID']['Address2'] != null ? ', ${record['C_Location_ID']['Address2']}' : ''}${record['C_Location_ID']['Address3'] != null ? ', ${record['C_Location_ID']['Address3']}' : ''}${record['C_Location_ID']['Address4'] != null ? ', ${record['C_Location_ID']['Address4']}' : ''}';
-      POSPrinter.headerPhone = record['Phone'];
+          '${record['C_Location_ID']?['Address1'] ?? ''}${record['C_Location_ID']?['Address2'] != null ? ', ${record['C_Location_ID']?['Address2']}' : ''}${record['C_Location_ID']?['Address3'] != null ? ', ${record['C_Location_ID']?['Address3']}' : ''}${record['C_Location_ID']?['Address4'] != null ? ', ${record['C_Location_ID']?['Address4']}' : ''}';
+      POSPrinter.headerPhone = record['Phone2']?.toString() ?? record['Phone']?.toString();
       POSPrinter.headerTaxID = record['TaxID'];
       POSPrinter.headerDV = record['dv'];
       POSPrinter.headerEmail = record['EMail'];
@@ -386,28 +287,113 @@ Future<bool> _loadPOSPrinterData() async {
       );
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Excepción en _loadPOSPrinterData: $e',
-      level: 'ERROR',
-      tag: '_loadPOSPrinterData',
-    );
+    CurrentLogMessage.add('Excepción en _loadPOSPrinterData: $e', level: 'ERROR', tag: '_loadPOSPrinterData');
   }
 
   return false;
 }
 
+Future<void> _loadDynamicPOSPrinterConfig() async {
+  if (!POS.isPOS || POS.cPosID == null) return;
+  try {
+    final response = await get(
+      Uri.parse('${EndPoints.cdsPOSPrinterConfig}?\$filter=C_POS_ID eq ${POS.cPosID}'),
+      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = json.decode(utf8.decode(response.bodyBytes));
+      final records = decoded['records'] as List?;
+      if (records != null && records.isNotEmpty) {
+        final data = records.first;
+        POSPrinter.header1 = data['Header1']?.toString();
+        POSPrinter.header2 = data['Header2']?.toString();
+        POSPrinter.header3 = data['Header3']?.toString();
+        POSPrinter.header4 = data['Header4']?.toString();
+        POSPrinter.footer1 = data['Footer1']?.toString();
+        POSPrinter.footer2 = data['Footer2']?.toString();
+        POSPrinter.footer3 = data['Footer3']?.toString();
+        POSPrinter.footer4 = data['Footer4']?.toString();
+      }
+    }
+  } catch (e) {
+    CurrentLogMessage.add('Excepción en _loadDynamicPOSPrinterConfig: $e', level: 'ERROR', tag: '_loadDynamicPOSPrinterConfig');
+  }
+}
+
+Future<void> _loadDiscountTaxConfig() async {
+  final chargeId = POS.discountChargeID;
+  if (chargeId == null) return;
+
+  try {
+    final chargeResponse = await get(
+      Uri.parse('${EndPoints.cCharge}?\$filter=C_Charge_ID eq $chargeId&\$select=C_TaxCategory_ID'),
+      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+    );
+    if (chargeResponse.statusCode != 200) {
+      throw Exception('No se pudo consultar C_Charge: ${chargeResponse.statusCode} ${chargeResponse.body}');
+    }
+
+    final chargeRecords = (json.decode(utf8.decode(chargeResponse.bodyBytes))['records'] as List?) ?? const [];
+    final dynamic taxCategoryField = chargeRecords.isNotEmpty ? chargeRecords.first['C_TaxCategory_ID'] : null;
+    final dynamic taxCategoryId = taxCategoryField is Map ? taxCategoryField['id'] : null;
+    if (taxCategoryId is! num) {
+      throw Exception('El charge $chargeId no tiene C_TaxCategory_ID configurado.');
+    }
+
+    final categoryResponse = await get(
+      Uri.parse(
+        '${EndPoints.cTaxCategory}?\$filter=C_TaxCategory_ID eq ${taxCategoryId.toInt()}&\$select=Name&\$expand=C_Tax(\$select=Name,Rate)',
+      ),
+      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
+    );
+    if (categoryResponse.statusCode != 200) {
+      throw Exception('No se pudo consultar C_TaxCategory: ${categoryResponse.statusCode} ${categoryResponse.body}');
+    }
+
+    final categoryRecords = (json.decode(utf8.decode(categoryResponse.bodyBytes))['records'] as List?) ?? const [];
+    final List<dynamic> taxes = categoryRecords.isNotEmpty ? (categoryRecords.first['C_Tax'] as List? ?? const []) : const [];
+    if (taxes.isEmpty) {
+      throw Exception('La categoría ${taxCategoryId.toInt()} no tiene impuestos configurados.');
+    }
+
+    final firstTax = taxes.first;
+    final dynamic taxId = firstTax['id'];
+    final dynamic rawRate = firstTax['Rate'];
+    final rate = rawRate is num ? rawRate.toDouble() : double.tryParse(rawRate?.toString() ?? '');
+    if (taxId is! num || rate == null) {
+      throw Exception('El primer impuesto de la categoría ${taxCategoryId.toInt()} no tiene ID o Rate válido.');
+    }
+
+    POS.discountTaxID = taxId.toInt();
+    POS.discountTaxRate = rate;
+  } catch (e) {
+    POS.discountTaxID = null;
+    POS.discountTaxRate = null;
+    CurrentLogMessage.add('Configuración fiscal del descuento no disponible: $e', level: 'ERROR', tag: '_loadDiscountTaxConfig');
+  }
+}
+
 Future<void> _loadPOSData(BuildContext context) async {
   try {
+    // Evita reutilizar el charge de una sesión/POS anterior cuando el campo no viene configurado.
+    POS.discountChargeID = null;
+    POS.discountTaxID = null;
+    POS.discountTaxRate = null;
+    POS.bankAccountID = null;
+    POS.warehouseID = null;
+    POS.templatePartnerID = null;
+    POS.templatePartnerName = null;
+    POS.docTypeRefundID = null;
+    POS.docTypeRefundName = null;
+    POS.docSubTypeRefund = null;
+    POS.isPOS = false;
+    POS.isModifyPrice = false;
     final String filter = 'C_POS_ID eq ${POS.cPosID}';
 
     final response = await get(
-      Uri.parse(
-        '${EndPoints.cPos}?\$filter=$filter&\$expand=C_DocType_ID,C_DocTypeRefund_ID',
-      ),
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': Token.auth!,
-      },
+      Uri.parse('${EndPoints.cPos}?\$filter=$filter&\$expand=C_DocType_ID,C_DocTypeRefund_ID,C_BankAccount_ID'),
+      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
@@ -417,9 +403,7 @@ Future<void> _loadPOSData(BuildContext context) async {
       if (records == null || records.isEmpty) {
         //? No hay Terminal PDV configurado para este usuario, obteniendo datos por defecto del priceList
         POS.priceListID ??= await _getMPriceListID();
-        POS.priceListVersionID = await getMPriceListVersion(
-          POS.priceListID ?? 0,
-        );
+        POS.priceListVersionID = await getMPriceListVersion(POS.priceListID ?? 0);
         POS.cPaymentTermID = await _getcPaymentTermID();
         await fetchTaxs();
         await _getCDocTypeComplete();
@@ -435,42 +419,39 @@ Future<void> _loadPOSData(BuildContext context) async {
       POS.docSubType = posData['C_DocType_ID']?['DocSubTypeSO']?['id'];
       POS.docTypeRefundID = posData['C_DocTypeRefund_ID']?['id'];
       POS.docTypeRefundName = posData['C_DocTypeRefund_ID']?['Name'];
-      POS.docSubTypeRefund =
-          posData['C_DocTypeRefund_ID']?['DocSubTypeSO']?['id'];
+      POS.docSubTypeRefund = posData['C_DocTypeRefund_ID']?['DocSubTypeSO']?['id'];
       POS.templatePartnerID = posData['C_BPartnerCashTrx_ID']?['id'];
       POS.templatePartnerName = posData['C_BPartnerCashTrx_ID']?['identifier'];
       POS.warehouseID = posData['M_Warehouse_ID']?['id'];
+      POS.isModifyPrice = posData['IsModifyPrice'] == true;
+      final dynamic bankAccount = posData['C_BankAccount_ID'];
+      final dynamic rawBankAccountId = bankAccount is Map ? bankAccount['id'] : bankAccount;
+      POS.bankAccountID = rawBankAccountId is num ? rawBankAccountId.toInt() : int.tryParse(rawBankAccountId?.toString() ?? '');
+      final dynamic discountChargeId = posData['POS_Discount_Charge_ID']?['id'];
+      POS.discountChargeID = discountChargeId is num && discountChargeId.toInt() > 0 ? discountChargeId.toInt() : null;
+      await _loadDiscountTaxConfig();
       POS.priceListVersionID = await getMPriceListVersion(POS.priceListID ?? 0);
 
       await fetchTaxs();
 
       POS.isPOS = POS.cPosID != null;
+      await _loadDynamicPOSPrinterConfig();
 
       // Tomamos la informacion del Yappy si existe, si no se mantiene en null
       Yappy.yappyConfigID = posData?['CDS_YappyConf_ID']?['id'];
       Yappy.groupId = posData?['CDS_YappyGroup_ID']?['identifier'];
       Yappy.deviceId = posData?['CDS_YappyReceiptUnit_ID']?['identifier'];
 
-      if (Yappy.yappyConfigID != null &&
-          Yappy.groupId != null &&
-          Yappy.deviceId != null) {
+      if (Yappy.yappyConfigID != null && Yappy.groupId != null && Yappy.deviceId != null) {
         await _getYappyEndPoint();
         await _getYappyKeys();
       }
 
       // Cargamos los tipos de documentos disponibles para el POS
       POS.docTypesComplete = [
-        {
-          'id': POS.docTypeID.toString(),
-          'name': POS.docTypeName ?? '',
-          'DocSubTypeSO': POS.docSubType ?? '',
-        },
+        if (POS.docTypeID != null) {'id': POS.docTypeID.toString(), 'name': POS.docTypeName ?? '', 'DocSubTypeSO': POS.docSubType ?? ''},
         if (POS.docTypeRefundID != null)
-          {
-            'id': POS.docTypeRefundID.toString(),
-            'name': POS.docTypeRefundName ?? '',
-            'DocSubTypeSO': POS.docSubTypeRefund ?? '',
-          },
+          {'id': POS.docTypeRefundID.toString(), 'name': POS.docTypeRefundName ?? '', 'DocSubTypeSO': POS.docSubTypeRefund ?? ''},
       ];
     } else {
       CurrentLogMessage.add(
@@ -480,11 +461,7 @@ Future<void> _loadPOSData(BuildContext context) async {
       );
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Excepción en loadPOSData: $e',
-      level: 'ERROR',
-      tag: '_loadPOSData',
-    );
+    CurrentLogMessage.add('Excepción en loadPOSData: $e', level: 'ERROR', tag: '_loadPOSData');
     if (e is ClientException) {
       handle401(context);
     }
@@ -516,10 +493,7 @@ Future<void> _getYappyKeys() async {
       Uri.parse(
         '${EndPoints.cdsYappyGroup}?\$filter=CDS_YappyConf_ID eq ${Yappy.yappyConfigID}&\$select=Name,Value,CDS_API_Key,CDS_Secret_Key',
       ),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.auth!,
-      },
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
@@ -529,18 +503,10 @@ Future<void> _getYappyKeys() async {
       Yappy.apiKey = record['CDS_API_Key'];
       Yappy.secretKey = record['CDS_Secret_Key'];
     } else {
-      CurrentLogMessage.add(
-        'Error en _getYappyKeys: ${response.statusCode}, ${response.body}',
-        level: 'ERROR',
-        tag: '_getYappyKeys',
-      );
+      CurrentLogMessage.add('Error en _getYappyKeys: ${response.statusCode}, ${response.body}', level: 'ERROR', tag: '_getYappyKeys');
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Error en _getYappyKeys: $e',
-      level: 'ERROR',
-      tag: '_getYappyKeys',
-    );
+    CurrentLogMessage.add('Error en _getYappyKeys: $e', level: 'ERROR', tag: '_getYappyKeys');
   }
 }
 
@@ -550,10 +516,7 @@ Future<void> _getYappyEndPoint() async {
       Uri.parse(
         '${EndPoints.cdsYappyConf}?\$filter=CDS_YappyConf_ID eq ${Yappy.yappyConfigID}&\$select=Name,CDS_YappyEndPoint,CDS_IsYappyTest',
       ),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.auth!,
-      },
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
@@ -571,24 +534,15 @@ Future<void> _getYappyEndPoint() async {
       );
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Error en _getYappyEndPoint: $e',
-      level: 'ERROR',
-      tag: '_getYappyEndPoint',
-    );
+    CurrentLogMessage.add('Error en _getYappyEndPoint: $e', level: 'ERROR', tag: '_getYappyEndPoint');
   }
 }
 
 Future<int?> _getMPriceListID() async {
   try {
     final response = await get(
-      Uri.parse(
-        '${EndPoints.mPriceList}?\$filter=IsSOPriceList eq true AND IsDefault eq true',
-      ),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.auth!,
-      },
+      Uri.parse('${EndPoints.mPriceList}?\$filter=IsSOPriceList eq true AND IsDefault eq true'),
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
@@ -597,18 +551,10 @@ Future<int?> _getMPriceListID() async {
 
       return responseData['records'][0]['id'];
     } else {
-      CurrentLogMessage.add(
-        'Error en _getMPriceListID: ${response.statusCode}, ${response.body}',
-        level: 'ERROR',
-        tag: '_getMPriceListID',
-      );
+      CurrentLogMessage.add('Error en _getMPriceListID: ${response.statusCode}, ${response.body}', level: 'ERROR', tag: '_getMPriceListID');
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Error en _getMPriceListID: $e',
-      level: 'ERROR',
-      tag: '_getMPriceListID',
-    );
+    CurrentLogMessage.add('Error en _getMPriceListID: $e', level: 'ERROR', tag: '_getMPriceListID');
   }
   return null;
 }
@@ -616,13 +562,8 @@ Future<int?> _getMPriceListID() async {
 Future<int?> getMPriceListVersion(int id) async {
   try {
     final response = await get(
-      Uri.parse(
-        '${EndPoints.mPriceList}?\$filter=M_PriceList_ID eq $id&\$expand=M_PriceList_Version',
-      ),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.auth!,
-      },
+      Uri.parse('${EndPoints.mPriceList}?\$filter=M_PriceList_ID eq $id&\$expand=M_PriceList_Version'),
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
@@ -641,11 +582,7 @@ Future<int?> getMPriceListVersion(int id) async {
       );
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Error en _getMPriceListVersion: $e',
-      level: 'ERROR',
-      tag: '_getMPriceListVersion',
-    );
+    CurrentLogMessage.add('Error en _getMPriceListVersion: $e', level: 'ERROR', tag: '_getMPriceListVersion');
   }
   return null;
 }
@@ -654,10 +591,7 @@ Future<int?> _getcPaymentTermID() async {
   try {
     final response = await get(
       Uri.parse('${EndPoints.cPaymentTermID}?\$filter=IsDefault eq true'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.auth!,
-      },
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
@@ -673,11 +607,7 @@ Future<int?> _getcPaymentTermID() async {
       );
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Error en _getcPaymentTermID: $e',
-      level: 'ERROR',
-      tag: '_getcPaymentTermID',
-    );
+    CurrentLogMessage.add('Error en _getcPaymentTermID: $e', level: 'ERROR', tag: '_getcPaymentTermID');
   }
   return null;
 }
@@ -685,26 +615,15 @@ Future<int?> _getcPaymentTermID() async {
 Future<int?> _getCDocTypeComplete() async {
   try {
     final response = await get(
-      Uri.parse(
-        '${EndPoints.cDocType}?\$filter=DocBaseType eq \'SOO\'&\$orderby=Name&\$select=Name,DocSubTypeSO',
-      ),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.auth!,
-      },
+      Uri.parse('${EndPoints.cDocType}?\$filter=DocBaseType eq \'SOO\'&\$orderby=Name&\$select=Name,DocSubTypeSO'),
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
       final responseData = json.decode(response.body);
       final records = responseData['records'] as List;
       POS.docTypesComplete = records
-          .map(
-            (r) => {
-              'id': r['id'].toString(),
-              'name': r['Name'] ?? '',
-              'DocSubTypeSO': r['DocSubTypeSO']['id'] ?? '',
-            },
-          )
+          .map((r) => {'id': r['id'].toString(), 'name': r['Name'] ?? '', 'DocSubTypeSO': r['DocSubTypeSO']['id'] ?? ''})
           .toList();
     } else {
       CurrentLogMessage.add(
@@ -714,11 +633,7 @@ Future<int?> _getCDocTypeComplete() async {
       );
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Error en _getCDocTypeComplete: $e',
-      level: 'ERROR',
-      tag: '_getCDocTypeComplete',
-    );
+    CurrentLogMessage.add('Error en _getCDocTypeComplete: $e', level: 'ERROR', tag: '_getCDocTypeComplete');
   }
   return null;
 }
@@ -729,28 +644,17 @@ Future<int?> _getCDocType() async {
       Uri.parse(
         '${EndPoints.cDocType}?\$filter=DocBaseType eq \'SOO\' AND IsDefault eq true OR DocSubTypeSO eq \'OB\'&\$orderby=IsDefault desc',
       ),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.auth!,
-      },
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
       final responseData = json.decode(response.body);
       return responseData['records'][0]['id'];
     } else {
-      CurrentLogMessage.add(
-        'Error en _getCDocType: ${response.statusCode}, ${response.body}',
-        level: 'ERROR',
-        tag: '_getCDocType',
-      );
+      CurrentLogMessage.add('Error en _getCDocType: ${response.statusCode}, ${response.body}', level: 'ERROR', tag: '_getCDocType');
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Error en _getCDocType: $e',
-      level: 'ERROR',
-      tag: '_getCDocType',
-    );
+    CurrentLogMessage.add('Error en _getCDocType: $e', level: 'ERROR', tag: '_getCDocType');
   }
   return null;
 }
@@ -759,10 +663,7 @@ Future<int?> _getChartIDByName(String chartName) async {
   try {
     final response = await get(
       Uri.parse("${EndPoints.adChart}?\$filter=Name eq '$chartName'"),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.auth!,
-      },
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
@@ -782,11 +683,7 @@ Future<int?> _getChartIDByName(String chartName) async {
       );
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Error en _getChartIDByName para $chartName: $e',
-      level: 'ERROR',
-      tag: '_getChartIDByName',
-    );
+    CurrentLogMessage.add('Error en _getChartIDByName para $chartName: $e', level: 'ERROR', tag: '_getChartIDByName');
   }
 
   return null;
@@ -795,37 +692,22 @@ Future<int?> _getChartIDByName(String chartName) async {
 Future<void> _loadChartIDs() async {
   Charts.salesYTDID = await _getChartIDByName('Sales YTD');
   Charts.salesPerDayID = await _getChartIDByName('Sales Per Day');
-  Charts.salesYTDBySalesRepID = await _getChartIDByName(
-    'Sales YTD By SalesRep',
-  );
-  Charts.salesPerDayByProductCategoryID = await _getChartIDByName(
-    'Sales Per Day By Product Category',
-  );
+  Charts.salesYTDBySalesRepID = await _getChartIDByName('Sales YTD By SalesRep');
+  Charts.salesPerDayByProductCategoryID = await _getChartIDByName('Sales Per Day By Product Category');
 }
 
-Future<List<Map<String, dynamic>>?> getOrganizationsAfterLogin(
-  BuildContext context,
-) async {
+Future<List<Map<String, dynamic>>?> getOrganizationsAfterLogin(BuildContext context) async {
   try {
     final response = await get(
       Uri.parse(EndPoints.getOrganizationsAfterLogin),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': Token.auth!,
-      },
+      headers: {'Content-Type': 'application/json', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
       final responseData = json.decode(response.body);
-      List<Map<String, dynamic>> organizations =
-          (responseData['records'] as List)
-              .map(
-                (organization) => {
-                  'id': organization['id'],
-                  'name': organization['Name'],
-                },
-              )
-              .toList();
+      List<Map<String, dynamic>> organizations = (responseData['records'] as List)
+          .map((organization) => {'id': organization['id'], 'name': organization['Name']})
+          .toList();
       return organizations;
     } else if (response.statusCode == 401) {
       handle401(context);
@@ -837,11 +719,7 @@ Future<List<Map<String, dynamic>>?> getOrganizationsAfterLogin(
       );
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Error general getOrganizationsAfterLogin: $e',
-      level: 'ERROR',
-      tag: 'getOrganizationsAfterLogin',
-    );
+    CurrentLogMessage.add('Error general getOrganizationsAfterLogin: $e', level: 'ERROR', tag: 'getOrganizationsAfterLogin');
   }
   return null;
 }
@@ -873,10 +751,7 @@ Future<void> fetchTaxs() async {
   try {
     final response = await get(
       Uri.parse(EndPoints.cTax),
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': Token.auth!,
-      },
+      headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
     );
 
     if (response.statusCode == 200) {
@@ -896,10 +771,6 @@ Future<void> fetchTaxs() async {
       throw Exception('Error al cargar los impuestos: ${response.statusCode}');
     }
   } catch (e) {
-    CurrentLogMessage.add(
-      'Excepción al obtener impuesto: $e',
-      level: 'ERROR',
-      tag: 'fetchTaxs',
-    );
+    CurrentLogMessage.add('Excepción al obtener impuesto: $e', level: 'ERROR', tag: 'fetchTaxs');
   }
 }

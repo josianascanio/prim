@@ -4,6 +4,7 @@ class POS {
   static int? cPosID;
   static int? priceListID;
   static int? cPaymentTermID;
+  static int? bankAccountID;
   static int? priceListVersionID;
   static int? docTypeID;
   static String? docTypeName;
@@ -12,11 +13,15 @@ class POS {
   static String? docTypeRefundName;
   static String? docSubTypeRefund;
   static int? warehouseID;
+  static int? discountChargeID;
+  static int? discountTaxID;
+  static double? discountTaxRate;
 
   static int? templatePartnerID;
   static String? templatePartnerName;
   static String? currencySymbol = '\$';
   static bool isPOS = false;
+  static bool isModifyPrice = false;
 
   static List<Map<String, dynamic>> docTypesComplete = [];
 
@@ -51,9 +56,18 @@ class POSPrinter {
   static String? headerEmail;
   static Uint8List? logo;
   static bool isLogoSet = false;
+
+  static String? header1;
+  static String? header2;
+  static String? header3;
+  static String? header4;
+  static String? footer1;
+  static String? footer2;
+  static String? footer3;
+  static String? footer4;
 }
 
-class docSubTypeSO {
+class DocSubTypeSO {
   static String factura = 'WI';
   static String pedido = 'SO';
   static String cotizacion = 'OB';

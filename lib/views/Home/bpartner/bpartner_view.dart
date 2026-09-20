@@ -9,9 +9,11 @@ import '../../../shared/shimmer_list.dart';
 import '../../../shared/custom_textfield.dart';
 import '../../../localization/app_locale.dart';
 import '../dashboard/dashboard_view.dart';
-import '../order/order_funtions.dart';
 import 'bpartner_details.dart';
 import 'bpartner_new.dart';
+import 'bpartner_repository.dart';
+import '../../../shared/custom_pagination.dart';
+import 'bpartner_sync_controller.dart';
 
 class BPartnerListPage extends StatefulWidget {
   const BPartnerListPage({super.key});
@@ -22,6 +24,8 @@ class BPartnerListPage extends StatefulWidget {
 
 class _BPartnerListPageState extends State<BPartnerListPage> {
   List<Map<String, dynamic>> _bpartners = [];
+  int _currentPage = 0;
+  int _rowCount = 0;
   bool _isLoading = true;
   bool isSearchLoading = false;
   String searchQuery = '';
@@ -31,15 +35,35 @@ class _BPartnerListPageState extends State<BPartnerListPage> {
   @override
   void initState() {
     super.initState();
+    BPartnerRepository.instance.addListener(_onRepositoryChanged);
     _fetchBPartners();
+  }
+
+  @override
+  void dispose() {
+    BPartnerRepository.instance.removeListener(_onRepositoryChanged);
+    _debounce?.cancel();
+    searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onRepositoryChanged() async {
+    final page = await BPartnerRepository.instance.readCachedPage(searchTerm: searchController.text.trim(), pageIndex: _currentPage);
+    if (!mounted || page == null) return;
+    setState(() {
+      _bpartners = page.records;
+      _rowCount = page.rowCount;
+    });
   }
 
   Future<void> _fetchBPartners() async {
     setState(() => _isLoading = true);
-    final result = await fetchBPartner(context: context);
+    final result = await BPartnerRepository.instance.getCustomers(context: context);
     if (!mounted) return;
     setState(() {
-      _bpartners = result;
+      _bpartners = result.records;
+      _rowCount = result.rowCount;
+      _currentPage = result.pageIndex;
       _isLoading = false;
     });
   }
@@ -55,19 +79,28 @@ class _BPartnerListPageState extends State<BPartnerListPage> {
     });
   }
 
-  Future<void> _loadBPartner({bool showLoadingIndicator = false}) async {
+  Future<void> _loadBPartner({bool showLoadingIndicator = false, int page = 0}) async {
     if (showLoadingIndicator) {
       setState(() {
         isSearchLoading = true;
       });
     }
-    final partners = await fetchBPartner(context: context, searchTerm: searchController.text.trim());
+    final result = await BPartnerRepository.instance.getCustomers(
+      context: context,
+      searchTerm: searchController.text.trim(),
+      pageIndex: page,
+    );
     if (!mounted) return;
     setState(() {
-      _bpartners = partners;
+      _bpartners = result.records;
+      _rowCount = result.rowCount;
+      _currentPage = page;
+      _isLoading = false;
       isSearchLoading = false;
     });
   }
+
+  int get _totalPages => _rowCount == 0 ? 1 : (_rowCount / bPartnerPageSize).ceil();
 
   List<Map<String, dynamic>> _getFilteredPartners() {
     return _bpartners.where((bp) => bp['name'].toString().toLowerCase().contains(searchQuery.toLowerCase())).toList();
@@ -115,14 +148,18 @@ class _BPartnerListPageState extends State<BPartnerListPage> {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Theme.of(context).colorScheme.secondary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                         child: Text(
                           record['TaxID'] ?? 'Sin ID',
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.secondary),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      if (record['dv'] != null) Text('DV: ${record['dv']}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)),
+                      if (record['dv'] != null)
+                        Text('DV: ${record['dv']}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)),
                     ],
                   ),
                   if (record['LCO_TaxIdTypeName'] != null)
@@ -172,21 +209,87 @@ class _BPartnerListPageState extends State<BPartnerListPage> {
                   Row(
                     children: [
                       Expanded(
-                        child: TextfieldTheme(texto: AppLocale.searchCustomer.getString(context), controlador: searchController, pista: AppLocale.taxIDOrName.getString(context), onSubmitted: (_) => _loadBPartner(showLoadingIndicator: true)),
+                        child: TextfieldTheme(
+                          texto: AppLocale.searchCustomer.getString(context),
+                          controlador: searchController,
+                          pista: AppLocale.taxIDOrName.getString(context),
+                          onSubmitted: (_) => _loadBPartner(showLoadingIndicator: true),
+                        ),
                       ),
                       const SizedBox(width: CustomSpacer.small),
                       Container(
                         height: 55,
-                        decoration: BoxDecoration(color: Theme.of(context).primaryColor, borderRadius: BorderRadius.circular(8)),
+                        decoration: BoxDecoration(
+                          color:
+                              Theme.of(context).floatingActionButtonTheme.backgroundColor ?? Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         child: IconButton(
-                          icon: const Icon(Icons.search, color: Colors.white),
+                          icon: Icon(
+                            Icons.search,
+                            color:
+                                Theme.of(context).floatingActionButtonTheme.foregroundColor ??
+                                Theme.of(context).colorScheme.onPrimaryContainer,
+                          ),
                           onPressed: () => _loadBPartner(showLoadingIndicator: true),
                         ),
+                      ),
+                      const SizedBox(width: CustomSpacer.small),
+                      IconButton.filledTonal(
+                        tooltip: AppLocale.syncCustomers.getString(context),
+                        onPressed: BPartnerSyncController.instance.isRunning
+                            ? null
+                            : () => BPartnerSyncController.instance.start(context: context),
+                        icon: const Icon(Icons.sync),
                       ),
                     ],
                   ),
 
                   if (isSearchLoading) ...[const SizedBox(height: CustomSpacer.small), const LinearProgressIndicator()],
+
+                  AnimatedBuilder(
+                    animation: BPartnerSyncController.instance,
+                    builder: (context, _) {
+                      final sync = BPartnerSyncController.instance;
+                      if (!sync.isRunning && sync.error == null) return const SizedBox.shrink();
+                      return Card(
+                        margin: const EdgeInsets.only(top: 12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      AppLocale.syncingCustomers.getString(context),
+                                      style: const TextStyle(fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                  Text('${sync.processed} / ${sync.total}'),
+                                  IconButton(
+                                    tooltip: AppLocale.stop.getString(context),
+                                    onPressed: sync.isStopping ? null : sync.stop,
+                                    color: Theme.of(context).colorScheme.error,
+                                    icon: const Icon(Icons.stop_circle_outlined),
+                                  ),
+                                ],
+                              ),
+                              LinearProgressIndicator(value: sync.total > 0 ? sync.progress : null),
+                              if (sync.error != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    AppLocale.customerSyncError.getString(context),
+                                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
 
                   const SizedBox(height: CustomSpacer.medium),
 
@@ -195,12 +298,27 @@ class _BPartnerListPageState extends State<BPartnerListPage> {
                         ? ShimmerList(separation: CustomSpacer.medium)
                         : _getFilteredPartners().isEmpty
                         ? Center(
-                            child: Text(AppLocale.noProductsFound.getString(context), style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey)),
+                            child: Text(
+                              AppLocale.noProductsFound.getString(context),
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey),
+                            ),
                           )
                         : ListView.builder(
                             physics: const BouncingScrollPhysics(),
-                            itemCount: _getFilteredPartners().length,
+                            itemCount: _getFilteredPartners().length + 1,
                             itemBuilder: (context, index) {
+                              if (index == _getFilteredPartners().length) {
+                                return CustomPagination(
+                                  currentPage: _currentPage,
+                                  totalPages: _totalPages,
+                                  onPrevious: _currentPage > 0 && !isSearchLoading
+                                      ? () => _loadBPartner(showLoadingIndicator: true, page: _currentPage - 1)
+                                      : null,
+                                  onNext: _currentPage + 1 < _totalPages && !isSearchLoading
+                                      ? () => _loadBPartner(showLoadingIndicator: true, page: _currentPage + 1)
+                                      : null,
+                                );
+                              }
                               final record = _getFilteredPartners()[index];
                               return _buildPartnerCard(record);
                             },
