@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -50,6 +51,8 @@ class _OrderListPageState extends State<OrderListPage> {
   bool _isLoadingReceipts = true;
   bool _isLoading = true, isSearchLoading = false;
   bool _isBackgroundSyncing = false;
+  bool _isManualRefresh = false;
+  final ScrollController _historyScrollController = ScrollController();
   bool _hasPinnedFilters = false;
   String? selectedDocTypeFilter;
   HistorySearchCriteria _appliedCriteria = const HistorySearchCriteria();
@@ -257,6 +260,7 @@ class _OrderListPageState extends State<OrderListPage> {
     _customerSearchController.dispose();
     _documentSearchController.dispose();
     _localFilterController.dispose();
+    _historyScrollController.dispose();
     super.dispose();
   }
 
@@ -420,6 +424,18 @@ class _OrderListPageState extends State<OrderListPage> {
       if (!hasCachedPage) {
         ToastMessage.show(context: context, message: _localized(AppLocale.historyUpdateError, {'error': error}), type: ToastType.failure);
       }
+    }
+  }
+
+  Future<void> _refreshHistory() async {
+    if (_isLoading || _isLoadingReceipts || isSearchLoading || _isBackgroundSyncing) {
+      return;
+    }
+    setState(() => _isManualRefresh = true);
+    try {
+      await _loadHistory(page: 0);
+    } finally {
+      if (mounted) setState(() => _isManualRefresh = false);
     }
   }
 
@@ -1595,7 +1611,7 @@ class _OrderListPageState extends State<OrderListPage> {
                       axisAlignment: -1,
                       child: FadeTransition(opacity: animation, child: child),
                     ),
-                    child: _isBackgroundSyncing
+                    child: _isBackgroundSyncing && !_isManualRefresh
                         ? const Padding(
                             key: ValueKey('history-syncing'),
                             padding: EdgeInsets.only(top: CustomSpacer.medium),
@@ -1609,30 +1625,55 @@ class _OrderListPageState extends State<OrderListPage> {
                   Expanded(
                     child: _isLoading || _isLoadingReceipts
                         ? ShimmerList(separation: CustomSpacer.medium)
-                        : ListView.builder(
-                            physics: const BouncingScrollPhysics(),
-                            itemCount: _getUnifiedHistory().isEmpty ? 2 : _getUnifiedHistory().length + 1,
-                            itemBuilder: (context, index) {
-                              if (_getUnifiedHistory().isEmpty && index == 0) {
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 40),
-                                  child: Center(
-                                    child: Text(
-                                      AppLocale.noMatchesThisPage.getString(context),
-                                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey),
+                        : CustomScrollView(
+                            controller: _historyScrollController,
+                            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                            slivers: [
+                              CupertinoSliverRefreshControl(
+                                refreshTriggerPullDistance: 96,
+                                refreshIndicatorExtent: 64,
+                                onRefresh: _refreshHistory,
+                                builder: (context, mode, pulledExtent, triggerDistance, indicatorExtent) {
+                                  if (mode == RefreshIndicatorMode.inactive) return const SizedBox.shrink();
+                                  final progress = (pulledExtent / triggerDistance).clamp(0.0, 1.0);
+                                  return _PullRefreshContent(
+                                    syncing:
+                                        mode == RefreshIndicatorMode.armed ||
+                                        mode == RefreshIndicatorMode.refresh ||
+                                        mode == RefreshIndicatorMode.done,
+                                    armed: mode == RefreshIndicatorMode.armed,
+                                    progress: progress,
+                                    pulledExtent: pulledExtent,
+                                    indicatorExtent: indicatorExtent,
+                                  );
+                                },
+                              ),
+                              if (_getUnifiedHistory().isEmpty)
+                                SliverToBoxAdapter(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 40),
+                                    child: Center(
+                                      child: Text(
+                                        AppLocale.noMatchesThisPage.getString(context),
+                                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey),
+                                      ),
                                     ),
                                   ),
-                                );
-                              }
-                              final footerIndex = _getUnifiedHistory().isEmpty ? 1 : _getUnifiedHistory().length;
-                              if (index == footerIndex) {
-                                return Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: _buildPagination());
-                              }
-                              final item = _getUnifiedHistory()[index];
-                              return item is InvoicePaymentReceipt
-                                  ? _buildInvoicePaymentCard(item)
-                                  : _buildOrderCard(item as Map<String, dynamic>);
-                            },
+                                )
+                              else
+                                SliverList.builder(
+                                  itemCount: _getUnifiedHistory().length,
+                                  itemBuilder: (context, index) {
+                                    final item = _getUnifiedHistory()[index];
+                                    return item is InvoicePaymentReceipt
+                                        ? _buildInvoicePaymentCard(item)
+                                        : _buildOrderCard(item as Map<String, dynamic>);
+                                  },
+                                ),
+                              SliverToBoxAdapter(
+                                child: Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: _buildPagination()),
+                              ),
+                            ],
                           ),
                   ),
                 ],
@@ -1645,8 +1686,115 @@ class _OrderListPageState extends State<OrderListPage> {
   }
 }
 
+class _PullRefreshContent extends StatelessWidget {
+  const _PullRefreshContent({
+    required this.syncing,
+    required this.armed,
+    required this.progress,
+    required this.pulledExtent,
+    required this.indicatorExtent,
+  });
+
+  final bool syncing;
+  final bool armed;
+  final double progress;
+  final double pulledExtent;
+  final double indicatorExtent;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibility = (pulledExtent / math.max(indicatorExtent * 0.72, 1)).clamp(0.0, 1.0);
+    return ClipRect(
+      child: Opacity(
+        opacity: visibility,
+        child: Transform.scale(
+          scale: 0.9 + (visibility * 0.1),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 240),
+            reverseDuration: const Duration(milliseconds: 180),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(animation), child: child),
+            ),
+            child: syncing
+                ? const _HistorySyncCard(key: ValueKey('pull-syncing'))
+                : _PullToSyncHint(key: const ValueKey('pull-progress'), progress: progress, armed: armed),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PullToSyncHint extends StatelessWidget {
+  const _PullToSyncHint({super.key, required this.progress, required this.armed});
+
+  final double progress;
+  final bool armed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final color = armed ? colors.primary : colors.onSurfaceVariant;
+    return Semantics(
+      liveRegion: true,
+      label: AppLocale.pullToSync.getString(context),
+      value: '${(progress * 100).round()}%',
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox.square(
+              dimension: 38,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(end: progress),
+                    duration: const Duration(milliseconds: 90),
+                    curve: Curves.easeOut,
+                    builder: (context, value, _) => SizedBox.square(
+                      dimension: 36,
+                      child: CircularProgressIndicator(
+                        value: value,
+                        strokeWidth: 3,
+                        backgroundColor: colors.outlineVariant.withOpacity(0.35),
+                        color: color,
+                      ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: armed ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutBack,
+                    child: AnimatedScale(
+                      scale: armed ? 1.12 : 1,
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutBack,
+                      child: Icon(Icons.arrow_downward_rounded, size: 21, color: color),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              style: Theme.of(context).textTheme.titleSmall!.copyWith(color: color, fontWeight: FontWeight.w700),
+              child: Text(AppLocale.pullToSync.getString(context)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _HistorySyncCard extends StatefulWidget {
-  const _HistorySyncCard();
+  const _HistorySyncCard({super.key});
 
   @override
   State<_HistorySyncCard> createState() => _HistorySyncCardState();
@@ -1666,7 +1814,9 @@ class _HistorySyncCardState extends State<_HistorySyncCard> with SingleTickerPro
   void didChangeDependencies() {
     super.didChangeDependencies();
     final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    if (reduceMotion == _reduceMotion && (_controller.isAnimating || reduceMotion)) return;
+    if (reduceMotion == _reduceMotion && (_controller.isAnimating || reduceMotion)) {
+      return;
+    }
     _reduceMotion = reduceMotion;
     if (_reduceMotion) {
       _controller.stop();
