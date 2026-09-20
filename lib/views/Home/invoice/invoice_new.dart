@@ -13,7 +13,6 @@ import 'package:primware/shared/custom_searchfield.dart';
 import 'package:primware/shared/custom_spacer.dart';
 import 'package:primware/shared/custom_textfield.dart';
 import 'package:primware/shared/footer.dart';
-import 'package:primware/shared/logo.dart';
 import 'package:primware/shared/logo_pill.dart';
 import 'package:primware/shared/toast_message.dart';
 import 'package:primware/views/Home/order/order_funtions.dart';

@@ -6,7 +6,6 @@ import 'package:primware/localization/app_locale.dart';
 import 'dart:async';
 import 'package:primware/shared/custom_container.dart';
 import 'package:primware/shared/custom_dropdown.dart';
-import 'package:primware/shared/logo.dart';
 import 'package:primware/shared/logo_pill.dart';
 import '../../../API/pos.api.dart';
 import '../../../shared/button.widget.dart';
