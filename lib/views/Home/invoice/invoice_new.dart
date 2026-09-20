@@ -14,6 +14,7 @@ import 'package:primware/shared/custom_spacer.dart';
 import 'package:primware/shared/custom_textfield.dart';
 import 'package:primware/shared/footer.dart';
 import 'package:primware/shared/logo.dart';
+import 'package:primware/shared/logo_pill.dart';
 import 'package:primware/shared/toast_message.dart';
 import 'package:primware/views/Home/order/order_funtions.dart';
 import 'package:printing/printing.dart';
@@ -374,18 +375,7 @@ class _InvoicePaymentPageState extends State<InvoicePaymentPage> {
             Text(AppLocale.invoicePayment.getString(context)),
           ],
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: CustomSpacer.medium),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                child: Logo(width: mobile ? 45 : 60),
-              ),
-            ),
-          ),
-        ],
+        actions: [LogoPill()],
       ),
       drawer: const MenuDrawer(),
       bottomNavigationBar: CustomFooter(),
