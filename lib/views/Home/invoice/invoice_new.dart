@@ -16,6 +16,7 @@ import 'package:primware/shared/footer.dart';
 import 'package:primware/shared/logo_pill.dart';
 import 'package:primware/shared/toast_message.dart';
 import 'package:primware/views/Home/order/order_funtions.dart';
+import 'package:primware/views/Home/order/order_history_repository.dart';
 import 'package:printing/printing.dart';
 
 import 'invoice_funtions.dart';
@@ -314,6 +315,16 @@ class _InvoicePaymentPageState extends State<InvoicePaymentPage> {
     if (!mounted) return;
     if (result['success'] == true) {
       final receipt = result['receipt'] as InvoicePaymentReceipt;
+      try {
+        await OrderHistoryRepository.instance.upsertReceipt(receipt, organizationId: organizationId);
+      } catch (error) {
+        CurrentLogMessage.add(
+          'El pago se completó, pero no se pudo guardar el recibo en el historial local: $error',
+          level: 'WARNING',
+          tag: 'upsertInvoicePaymentReceipt',
+        );
+      }
+      if (!mounted) return;
       final printReceipt = await _confirmPrintReceipt();
       if (!mounted) return;
       if (printReceipt == true) {

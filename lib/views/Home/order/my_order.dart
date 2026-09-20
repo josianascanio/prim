@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,6 +49,7 @@ class _OrderListPageState extends State<OrderListPage> {
   List<Map<String, dynamic>> _organizations = [];
   bool _isLoadingReceipts = true;
   bool _isLoading = true, isSearchLoading = false;
+  bool _isBackgroundSyncing = false;
   bool _hasPinnedFilters = false;
   String? selectedDocTypeFilter;
   HistorySearchCriteria _appliedCriteria = const HistorySearchCriteria();
@@ -261,9 +263,10 @@ class _OrderListPageState extends State<OrderListPage> {
   Future<void> _onHistoryCacheChanged() async {
     final cached = await OrderHistoryRepository.instance.readPage(criteria: _appliedCriteria, pageIndex: _currentPage);
     if (!mounted || cached == null || isSearchLoading) return;
+    final items = <Object>[...cached.orders, ...cached.receipts]..sort((left, right) => _historyDate(right).compareTo(_historyDate(left)));
     setState(() {
-      _orders = cached.orders;
-      _invoicePaymentReceipts = cached.receipts;
+      _pageCache[_currentPage] = UnifiedHistoryPage(items: items, totalCount: cached.totalCount, pageIndex: _currentPage);
+      _assignHistoryItems(items);
       _totalRecords = cached.totalCount;
     });
   }
@@ -359,6 +362,7 @@ class _OrderListPageState extends State<OrderListPage> {
       _isLoading = !hasCachedPage;
       _isLoadingReceipts = !hasCachedPage;
       isSearchLoading = !initialLoad && !hasCachedPage;
+      _isBackgroundSyncing = hasCachedPage;
     });
     try {
       final results = await Future.wait<dynamic>([
@@ -403,6 +407,7 @@ class _OrderListPageState extends State<OrderListPage> {
         _isLoading = false;
         _isLoadingReceipts = false;
         isSearchLoading = false;
+        _isBackgroundSyncing = false;
       });
     } catch (error) {
       if (!mounted) return;
@@ -410,6 +415,7 @@ class _OrderListPageState extends State<OrderListPage> {
         _isLoading = false;
         _isLoadingReceipts = false;
         isSearchLoading = false;
+        _isBackgroundSyncing = false;
       });
       if (!hasCachedPage) {
         ToastMessage.show(context: context, message: _localized(AppLocale.historyUpdateError, {'error': error}), type: ToastType.failure);
@@ -846,7 +852,7 @@ class _OrderListPageState extends State<OrderListPage> {
     Widget chip(String label, IconData icon, Color rawColor) {
       final bool isDark = Theme.of(context).brightness == Brightness.dark;
       final Color color = isDark ? Color.alphaBlend(Colors.white.withOpacity(0.4), rawColor) : rawColor;
-      
+
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -1261,14 +1267,18 @@ class _OrderListPageState extends State<OrderListPage> {
                 TextSpan(
                   text: '$label: ',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade400 : Colors.grey.shade700, 
-                    fontWeight: FontWeight.w500
+                    color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade400 : Colors.grey.shade700,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 TextSpan(
                   text: value,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: highlight ? accentColor : (Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade200 : Theme.of(context).textTheme.bodyMedium?.color),
+                    color: highlight
+                        ? accentColor
+                        : (Theme.of(context).brightness == Brightness.dark
+                              ? Colors.grey.shade200
+                              : Theme.of(context).textTheme.bodyMedium?.color),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -1457,11 +1467,17 @@ class _OrderListPageState extends State<OrderListPage> {
                         ).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.w700),
                       ),
                       const Spacer(),
-                      Icon(Icons.calendar_today_outlined, color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade400 : Colors.grey.shade500, size: 16),
+                      Icon(
+                        Icons.calendar_today_outlined,
+                        color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade400 : Colors.grey.shade500,
+                        size: 16,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         formatIdempiereDateUI(order['Created']?.toString() ?? ''),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade300 : Colors.grey.shade600),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade300 : Colors.grey.shade600,
+                        ),
                       ),
                     ],
                   ),
@@ -1571,6 +1587,23 @@ class _OrderListPageState extends State<OrderListPage> {
                 children: [
                   _buildLocalFilterField(),
 
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 280),
+                    reverseDuration: const Duration(milliseconds: 180),
+                    transitionBuilder: (child, animation) => SizeTransition(
+                      sizeFactor: animation,
+                      axisAlignment: -1,
+                      child: FadeTransition(opacity: animation, child: child),
+                    ),
+                    child: _isBackgroundSyncing
+                        ? const Padding(
+                            key: ValueKey('history-syncing'),
+                            padding: EdgeInsets.only(top: CustomSpacer.medium),
+                            child: _HistorySyncCard(),
+                          )
+                        : const SizedBox(key: ValueKey('history-synced')),
+                  ),
+
                   const SizedBox(height: CustomSpacer.medium),
 
                   Expanded(
@@ -1609,5 +1642,165 @@ class _OrderListPageState extends State<OrderListPage> {
         ),
       ),
     );
+  }
+}
+
+class _HistorySyncCard extends StatefulWidget {
+  const _HistorySyncCard();
+
+  @override
+  State<_HistorySyncCard> createState() => _HistorySyncCardState();
+}
+
+class _HistorySyncCardState extends State<_HistorySyncCard> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  bool _reduceMotion = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1650));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (reduceMotion == _reduceMotion && (_controller.isAnimating || reduceMotion)) return;
+    _reduceMotion = reduceMotion;
+    if (_reduceMotion) {
+      _controller.stop();
+      _controller.value = 0.35;
+    } else {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final baseTextColor = dark ? Colors.white.withOpacity(0.58) : const Color(0xFF56535F);
+    final highlightTextColor = dark ? Colors.white : const Color(0xFFA7A3AF);
+    final textStyle = Theme.of(
+      context,
+    ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.1, color: baseTextColor);
+    return Semantics(
+      liveRegion: true,
+      label: AppLocale.lookingForUpdates.getString(context),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final progress = _controller.value;
+          final zoom = 1 + (math.sin(progress * math.pi) * 0.018);
+          final label = Text(AppLocale.lookingForUpdates.getString(context), style: textStyle);
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CustomPaint(
+                    size: const Size.square(50),
+                    painter: _ThinkingOrbPainter(progress: _controller.value, brightness: Theme.of(context).brightness),
+                  ),
+                  const SizedBox(width: 10),
+                  ExcludeSemantics(
+                    child: _reduceMotion
+                        ? label
+                        : Transform.scale(
+                            scale: zoom,
+                            alignment: Alignment.centerLeft,
+                            child: ShaderMask(
+                              blendMode: BlendMode.srcIn,
+                              shaderCallback: (bounds) => LinearGradient(
+                                begin: Alignment(-2.4 + (progress * 3.8), 0),
+                                end: Alignment(-1.0 + (progress * 3.8), 0),
+                                colors: [baseTextColor, highlightTextColor, baseTextColor],
+                                stops: const [0, 0.5, 1],
+                              ).createShader(bounds),
+                              child: label,
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ThinkingOrbPainter extends CustomPainter {
+  const _ThinkingOrbPainter({required this.progress, required this.brightness});
+
+  final double progress;
+  final Brightness brightness;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = (size.shortestSide / 2) - 8;
+    final phase = progress * math.pi * 2;
+    final dark = brightness == Brightness.dark;
+    final background = dark ? const Color(0xFF343B62) : const Color(0xFFE9ECF8);
+    final palette = dark
+        ? const [Color(0xFF79E8FF), Color(0xFF9298FF), Color(0xFFE28BFF)]
+        : const [Color(0xFF087EA4), Color(0xFF5361D8), Color(0xFF9A42C8)];
+
+    canvas.drawCircle(
+      center,
+      radius * 0.94,
+      Paint()
+        ..color = (dark ? const Color(0xFF8E96FF) : const Color(0xFF7683DD)).withOpacity(dark ? 0.32 : 0.18)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, dark ? 7 : 5),
+    );
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.25, -0.3),
+          radius: 1.05,
+          colors: [background.withOpacity(0.96), dark ? const Color(0xFF171A2B) : const Color(0xFFF1F3FA)],
+        ).createShader(Rect.fromCircle(center: center, radius: radius)),
+    );
+    canvas.save();
+    canvas.clipPath(Path()..addOval(Rect.fromCircle(center: center, radius: radius)));
+
+    for (var index = 0; index < palette.length; index++) {
+      final angle = phase + (index * math.pi * 2 / palette.length);
+      final orbit = radius * (0.22 + index * 0.04);
+      final blobCenter = center + Offset(math.cos(angle) * orbit, math.sin(angle * 1.17) * orbit);
+      final blobRadius = radius * (0.82 - index * 0.08);
+      final paint = Paint()
+        ..shader = RadialGradient(
+          colors: [palette[index].withOpacity(dark ? 1 : 0.92), palette[index].withOpacity(0)],
+          stops: const [0, 1],
+        ).createShader(Rect.fromCircle(center: blobCenter, radius: blobRadius));
+      canvas.drawCircle(blobCenter, blobRadius, paint);
+    }
+
+    final glowCenter = center + Offset(math.sin(phase * 0.7) * radius * 0.2, math.cos(phase * 0.9) * radius * 0.2);
+    canvas.drawCircle(
+      glowCenter,
+      radius * 0.34,
+      Paint()
+        ..color = Colors.white.withOpacity(dark ? 0.48 : 0.38)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThinkingOrbPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.brightness != brightness;
   }
 }
