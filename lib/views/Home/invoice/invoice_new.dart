@@ -13,9 +13,10 @@ import 'package:primware/shared/custom_searchfield.dart';
 import 'package:primware/shared/custom_spacer.dart';
 import 'package:primware/shared/custom_textfield.dart';
 import 'package:primware/shared/footer.dart';
-import 'package:primware/shared/logo.dart';
+import 'package:primware/shared/logo_pill.dart';
 import 'package:primware/shared/toast_message.dart';
 import 'package:primware/views/Home/order/order_funtions.dart';
+import 'package:primware/views/Home/order/order_history_repository.dart';
 import 'package:printing/printing.dart';
 
 import 'invoice_funtions.dart';
@@ -176,13 +177,30 @@ class _InvoicePaymentPageState extends State<InvoicePaymentPage> {
 
   Future<void> _loadCustomers() async {
     if (!mounted) return;
+    final searchTerm = _customerController.text.trim();
     setState(() => _loadingCustomers = true);
-    final result = await fetchBPartner(context: context, searchTerm: _customerController.text.trim());
+    final result = await fetchBPartner(context: context, searchTerm: searchTerm);
     if (!mounted) return;
     setState(() {
       _customers = result;
       _loadingCustomers = false;
     });
+    if (searchTerm.isNotEmpty && result.length == 1) {
+      FocusScope.of(context).unfocus();
+      await _selectCustomer(result.single);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _searchCustomers(String query) async {
+    if (!mounted) return [];
+    setState(() => _loadingCustomers = true);
+    final result = await fetchBPartner(context: context, searchTerm: query.trim());
+    if (!mounted) return result;
+    setState(() {
+      _customers = result;
+      _loadingCustomers = false;
+    });
+    return result;
   }
 
   Future<void> _loadPaymentMethods() async {
@@ -297,6 +315,16 @@ class _InvoicePaymentPageState extends State<InvoicePaymentPage> {
     if (!mounted) return;
     if (result['success'] == true) {
       final receipt = result['receipt'] as InvoicePaymentReceipt;
+      try {
+        await OrderHistoryRepository.instance.upsertReceipt(receipt, organizationId: organizationId);
+      } catch (error) {
+        CurrentLogMessage.add(
+          'El pago se completó, pero no se pudo guardar el recibo en el historial local: $error',
+          level: 'WARNING',
+          tag: 'upsertInvoicePaymentReceipt',
+        );
+      }
+      if (!mounted) return;
       final printReceipt = await _confirmPrintReceipt();
       if (!mounted) return;
       if (printReceipt == true) {
@@ -374,18 +402,7 @@ class _InvoicePaymentPageState extends State<InvoicePaymentPage> {
             Text(AppLocale.invoicePayment.getString(context)),
           ],
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: CustomSpacer.medium),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                child: Logo(width: mobile ? 45 : 60),
-              ),
-            ),
-          ),
-        ],
+        actions: [LogoPill()],
       ),
       drawer: const MenuDrawer(),
       bottomNavigationBar: CustomFooter(),
@@ -445,6 +462,7 @@ class _InvoicePaymentPageState extends State<InvoicePaymentPage> {
                   searchBy: 'TaxID',
                   searchByText: 'Cédula',
                   enabled: !_processingPayments,
+                  onSearch: _searchCustomers,
                   onSubmit: (_) => _loadCustomers(),
                   onItemSelected: _selectCustomer,
                   onChanged: (value) {
@@ -532,8 +550,9 @@ class _InvoicePaymentPageState extends State<InvoicePaymentPage> {
   }
 
   Widget _buildPaymentMethods() {
+    final mobile = MediaQuery.sizeOf(context).width < 700;
     return CustomContainer(
-      maxWidthContainer: 320,
+      maxWidthContainer: mobile ? 360 : 320,
       margin: const EdgeInsets.only(top: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:primware/shared/custom_container.dart';
+import 'package:primware/shared/logo_pill.dart';
 import 'package:primware/shared/theme_switcher_controller.dart';
-import 'package:primware/shared/logo.dart';
 import 'package:primware/views/Home/dashboard/dashboard_skeleton.dart';
 import '../../../API/endpoint.dart';
 import '../../../API/pos.api.dart';
@@ -124,21 +124,7 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(AppLocale.dashboard.getString(context)),
-          actions: [
-            const ThemeToggleIconButton(),
-            !isMobile
-                ? Padding(
-                    padding: const EdgeInsets.only(right: CustomSpacer.medium),
-                    child: Container(
-                      decoration: Theme.of(context).brightness == Brightness.dark
-                          ? null
-                          : BoxDecoration(borderRadius: BorderRadius.circular(CustomSpacer.medium), color: Colors.white),
-                      padding: const EdgeInsets.all(CustomSpacer.small),
-                      child: const Logo(width: 60),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ],
+          actions: [const ThemeToggleIconButton(), !isMobile ? LogoPill() : const SizedBox.shrink()],
         ),
         bottomNavigationBar: const CustomFooter(),
         drawer: const MenuDrawer(),

@@ -174,6 +174,44 @@ class OrderHistoryRepository extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  Future<void> upsertReceipt(InvoicePaymentReceipt receipt, {required int organizationId}) async {
+    await initialize();
+    final receiptId = receipt.allocationId;
+    if (receiptId <= 0) return;
+
+    var changed = await _putIfChanged(_receiptKey(receiptId), _receiptToJson(receipt));
+    final prefix = 'page:$_clientNamespace:';
+    for (final key in _box!.keys.whereType<String>().where((key) => key.startsWith(prefix)).toList()) {
+      final raw = _box!.get(key);
+      if (raw is! Map) continue;
+      final page = Map<String, dynamic>.from(raw);
+      final criteriaRaw = page['criteria'];
+      final criteria = criteriaRaw is Map
+          ? HistorySearchCriteria.fromJson(Map<String, dynamic>.from(criteriaRaw))
+          : const HistorySearchCriteria();
+      final pageIndex = _asInt(page['pageIndex']) ?? -1;
+      if (pageIndex != 0 || !_receiptMatches(receipt, organizationId, criteria)) continue;
+
+      final receiptIds = ((page['receiptIds'] as List?) ?? const []).map(_asInt).whereType<int>().toList();
+      if (receiptIds.isEmpty) {
+        receiptIds.addAll(
+          ((page['receipts'] as List?) ?? const []).whereType<Map>().map((item) => _asInt(item['allocationId'])).whereType<int>(),
+        );
+      }
+      final alreadyIncluded = receiptIds.remove(receiptId);
+      receiptIds.insert(0, receiptId);
+      if (receiptIds.length > 50) receiptIds.removeLast();
+      if (!alreadyIncluded) {
+        page['totalCount'] = (_asInt(page['totalCount']) ?? 0) + 1;
+      }
+      page['receiptIds'] = receiptIds;
+      page.remove('receipts');
+      page.remove('updatedAt');
+      changed = await _putIfChanged(key, page) || changed;
+    }
+    if (changed) notifyListeners();
+  }
+
   Future<bool> _putIfChanged(String key, Map<String, dynamic> value) async {
     final current = _box?.get(key);
     if (current is Map && jsonEncode(current) == jsonEncode(value)) return false;
@@ -192,6 +230,18 @@ class OrderHistoryRepository extends ChangeNotifier {
         (criteria.docStatus == null || status?.toString() == criteria.docStatus) &&
         (!criteria.onlyMyMovements || _asInt(salesRep) == UserData.id) &&
         (criteria.organizationId == null || _asInt(order['AD_Org_ID']) == criteria.organizationId);
+  }
+
+  bool _receiptMatches(InvoicePaymentReceipt receipt, int organizationId, HistorySearchCriteria criteria) {
+    final customerQuery = criteria.customerText.trim().toLowerCase();
+    final documentQuery = criteria.documentText.trim().toLowerCase();
+    final customer = '${receipt.customerName} ${receipt.customerTaxId}'.toLowerCase();
+    final document = '${receipt.displayDocumentNo} ${receipt.invoices.map((item) => item.documentNo).join(' ')}'.toLowerCase();
+    return (customerQuery.isEmpty || customer.contains(customerQuery)) &&
+        (documentQuery.isEmpty || document.contains(documentQuery)) &&
+        (criteria.docStatus == null || criteria.docStatus == 'CO') &&
+        (!criteria.onlyMyMovements || receipt.salesRepId == UserData.id) &&
+        (criteria.organizationId == null || criteria.organizationId == organizationId);
   }
 
   static Map<String, dynamic> _deepMap(Map<dynamic, dynamic> value) => Map<String, dynamic>.from(jsonDecode(jsonEncode(value)) as Map);

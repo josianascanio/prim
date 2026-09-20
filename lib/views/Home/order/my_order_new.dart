@@ -6,7 +6,7 @@ import 'package:primware/localization/app_locale.dart';
 import 'dart:async';
 import 'package:primware/shared/custom_container.dart';
 import 'package:primware/shared/custom_dropdown.dart';
-import 'package:primware/shared/logo.dart';
+import 'package:primware/shared/logo_pill.dart';
 import '../../../API/pos.api.dart';
 import '../../../shared/button.widget.dart';
 import '../../../shared/category_filter_sheet.dart';
@@ -1972,18 +1972,7 @@ class _OrderNewPageState extends State<OrderNewPage> {
             ],
           ),
           backgroundColor: widget.isRefund ? Theme.of(context).colorScheme.error : null,
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: CustomSpacer.medium),
-              child: Center(
-                child: Container(
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(CustomSpacer.small), color: Colors.white),
-                  padding: EdgeInsets.all(isMobile ? 4.0 : CustomSpacer.small),
-                  child: Logo(width: isMobile ? 45 : 60),
-                ),
-              ),
-            ),
-          ],
+          actions: [LogoPill()],
         ),
         drawer: MenuDrawer(),
         bottomNavigationBar: CustomFooter(),

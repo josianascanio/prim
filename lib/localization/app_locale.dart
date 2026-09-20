@@ -36,6 +36,8 @@ class AppLocale {
   static const String refineProductSearch = 'refineProductSearch';
   static const String syncProducts = 'syncProducts';
   static const String syncingProducts = 'syncingProducts';
+  static const String lookingForUpdates = 'lookingForUpdates';
+  static const String pullToSync = 'pullToSync';
   static const String preparingSync = 'preparingSync';
   static const String productSyncError = 'productSyncError';
   static const String stop = 'stop';
@@ -496,6 +498,8 @@ class AppLocale {
     documentTypeFilter: 'Document type:',
     all: 'All',
     historyUpdateError: 'The history could not be updated. {error}',
+    lookingForUpdates: 'Syncing updates...',
+    pullToSync: 'Sync',
     showingFilteredHistory:
         'Showing {visible} of {loaded} loaded on this page · {total} search results',
     showingHistory: 'Showing {start}–{end} of {total} activities',
@@ -976,6 +980,8 @@ class AppLocale {
     documentTypeFilter: 'Tipo de documento:',
     all: 'Todos',
     historyUpdateError: 'No se pudo actualizar el historial. {error}',
+    lookingForUpdates: 'Sincronizando novedades...',
+    pullToSync: 'Sincronizar',
     showingFilteredHistory:
         'Mostrando {visible} de {loaded} cargados en esta página · {total} resultados de búsqueda',
     showingHistory: 'Mostrando {start}–{end} de {total} movimientos',
