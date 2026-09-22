@@ -11,6 +11,12 @@ import '../../Auth/auth_funtions.dart';
 import '../product/product_cache_file_size.dart';
 
 const int bPartnerPageSize = 100;
+const String _bPartnerSelect =
+    'C_BPartner_ID,Name,TaxID,dv,M_PriceList_ID,TipoClienteFE,LCO_TaxIdType_ID,C_BP_Group_ID';
+const String _bPartnerExpand =
+    'AD_User(\$select=AD_User_ID,Name,EMail),'
+    'C_BPartner_Location(\$select=C_BPartner_Location_ID,Name,C_Location_ID;'
+    '\$expand=C_Location_ID(\$select=C_Location_ID,Address1))';
 
 class BPartnerPage {
   const BPartnerPage({
@@ -156,7 +162,7 @@ class BPartnerRepository extends ChangeNotifier {
           Uri.parse(
             '${EndPoints.cBPartner}?\$top=$bPartnerPageSize&\$skip=${pageIndex * bPartnerPageSize}'
             '&\$filter=${filters.join(' and ')}&\$orderby=Name'
-            '&\$expand=AD_User,C_BPartner_Location(\$expand=C_Location_ID)',
+            '&\$select=$_bPartnerSelect&\$expand=$_bPartnerExpand',
           ),
           headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
         );
@@ -197,7 +203,7 @@ class BPartnerRepository extends ChangeNotifier {
     final response = await http.get(
       Uri.parse(
         '${EndPoints.cBPartner}?\$filter=IsCustomer eq true and C_BPartner_ID eq $id'
-        '&\$expand=AD_User,C_BPartner_Location(\$expand=C_Location_ID)',
+        '&\$select=$_bPartnerSelect&\$expand=$_bPartnerExpand',
       ),
       headers: {'Content-Type': 'application/json; charset=UTF-8', 'Authorization': Token.auth!},
     );
