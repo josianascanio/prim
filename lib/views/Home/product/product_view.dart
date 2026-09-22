@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:primware/API/pos.api.dart';
+import 'package:primware/shared/animated_action_button.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:primware/shared/custom_container.dart';
 import 'package:primware/localization/app_locale.dart';
@@ -516,44 +517,42 @@ class _ProductListPageState extends State<ProductListPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextfieldTheme(
-                          texto: AppLocale.searchProducts.getString(context),
-                          controlador: productController,
-                          onSubmitted: (_) =>
-                              _loadProduct(showLoadingIndicator: true),
-                        ),
-                      ),
-                      const SizedBox(width: CustomSpacer.small),
-                      Container(
-                        height: 55,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).floatingActionButtonTheme.backgroundColor ?? 
-                                 Theme.of(context).colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: IconButton(
-                          icon: Icon(
-                            Icons.search,
-                            color: Theme.of(context).floatingActionButtonTheme.foregroundColor ??
-                                   Theme.of(context).colorScheme.onPrimaryContainer,
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: TextfieldTheme(
+                            texto: AppLocale.searchProducts.getString(context),
+                            controlador: productController,
+                            onSubmitted: (_) =>
+                                _loadProduct(showLoadingIndicator: true),
                           ),
-                          tooltip: 'Buscar',
-                          onPressed: () =>
-                              _loadProduct(showLoadingIndicator: true),
                         ),
-                      ),
-                      const SizedBox(width: CustomSpacer.small),
-                      IconButton.filledTonal(
-                        tooltip: AppLocale.syncProducts.getString(context),
-                        onPressed: ProductSyncController.instance.isRunning
-                            ? null
-                            : () => ProductSyncController.instance.start(),
-                        icon: const Icon(Icons.sync),
-                      ),
-                    ],
+                        const SizedBox(width: CustomSpacer.small),
+                        AnimatedActionButton(
+                          icon: Icons.search,
+                          tooltip: 'Buscar',
+                          onPressed: () => _loadProduct(showLoadingIndicator: true),
+                        ),
+                        const SizedBox(width: CustomSpacer.small),
+                        AnimatedBuilder(
+                          animation: ProductSyncController.instance,
+                          builder: (context, _) {
+                            return AnimatedActionButton(
+                              icon: Icons.sync,
+                              tooltip: AppLocale.syncProducts.getString(context),
+                              backgroundColor: Colors.green.withOpacity(0.8),
+                              iconColor: Colors.white,
+                              isSpinning: ProductSyncController.instance.isRunning,
+                              onPressed: ProductSyncController.instance.isRunning
+                                  ? null
+                                  : () => ProductSyncController.instance.start(),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
 
                   if (isProductSearchLoading) ...[

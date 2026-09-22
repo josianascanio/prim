@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:primware/shared/animated_action_button.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:primware/shared/custom_container.dart';
 import '../../../shared/custom_app_menu.dart';
@@ -206,43 +208,42 @@ class _BPartnerListPageState extends State<BPartnerListPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextfieldTheme(
-                          texto: AppLocale.searchCustomer.getString(context),
-                          controlador: searchController,
-                          pista: AppLocale.taxIDOrName.getString(context),
-                          onSubmitted: (_) => _loadBPartner(showLoadingIndicator: true),
-                        ),
-                      ),
-                      const SizedBox(width: CustomSpacer.small),
-                      Container(
-                        height: 55,
-                        decoration: BoxDecoration(
-                          color:
-                              Theme.of(context).floatingActionButtonTheme.backgroundColor ?? Theme.of(context).colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: IconButton(
-                          icon: Icon(
-                            Icons.search,
-                            color:
-                                Theme.of(context).floatingActionButtonTheme.foregroundColor ??
-                                Theme.of(context).colorScheme.onPrimaryContainer,
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: TextfieldTheme(
+                            texto: AppLocale.searchCustomer.getString(context),
+                            controlador: searchController,
+                            pista: AppLocale.taxIDOrName.getString(context),
+                            onSubmitted: (_) => _loadBPartner(showLoadingIndicator: true),
                           ),
+                        ),
+                        const SizedBox(width: CustomSpacer.small),
+                        AnimatedActionButton(
+                          icon: Icons.search,
+                          tooltip: 'Buscar',
                           onPressed: () => _loadBPartner(showLoadingIndicator: true),
                         ),
-                      ),
-                      const SizedBox(width: CustomSpacer.small),
-                      IconButton.filledTonal(
-                        tooltip: AppLocale.syncCustomers.getString(context),
-                        onPressed: BPartnerSyncController.instance.isRunning
-                            ? null
-                            : () => BPartnerSyncController.instance.start(context: context),
-                        icon: const Icon(Icons.sync),
-                      ),
-                    ],
+                        const SizedBox(width: CustomSpacer.small),
+                        AnimatedBuilder(
+                          animation: BPartnerSyncController.instance,
+                          builder: (context, _) {
+                            return AnimatedActionButton(
+                              icon: Icons.sync,
+                              tooltip: AppLocale.syncCustomers.getString(context),
+                              backgroundColor: Colors.green.withOpacity(0.8),
+                              iconColor: Colors.white,
+                              isSpinning: BPartnerSyncController.instance.isRunning,
+                              onPressed: BPartnerSyncController.instance.isRunning
+                                  ? null
+                                  : () => BPartnerSyncController.instance.start(context: context),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
 
                   if (isSearchLoading) ...[const SizedBox(height: CustomSpacer.small), const LinearProgressIndicator()],
