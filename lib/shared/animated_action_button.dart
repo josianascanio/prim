@@ -26,27 +26,20 @@ class AnimatedActionButton extends StatefulWidget {
   State<AnimatedActionButton> createState() => _AnimatedActionButtonState();
 }
 
-class _AnimatedActionButtonState extends State<AnimatedActionButton>
-    with TickerProviderStateMixin {
+class _AnimatedActionButtonState extends State<AnimatedActionButton> with TickerProviderStateMixin {
   late AnimationController _controller;
   late AnimationController _spinController;
   late Animation<double> _scaleAnimation;
+  late Animation<double> _spinAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 100),
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.85).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 100));
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.85).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
-    _spinController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    );
+    _spinController = AnimationController(vsync: this, duration: const Duration(seconds: 1));
+    _spinAnimation = Tween<double>(begin: 0, end: -1).animate(_spinController);
     if (widget.isSpinning) {
       _spinController.repeat();
     }
@@ -104,19 +97,13 @@ class _AnimatedActionButtonState extends State<AnimatedActionButton>
         borderRadius: BorderRadius.circular(widget.borderRadius),
       ),
       child: RotationTransition(
-        turns: _spinController,
-        child: Icon(
-          widget.icon,
-          color: isDisabled ? fgColor.withOpacity(0.5) : fgColor,
-        ),
+        turns: _spinAnimation,
+        child: Icon(widget.icon, color: isDisabled ? fgColor.withOpacity(0.5) : fgColor),
       ),
     );
 
     if (widget.size == null) {
-      buttonContent = AspectRatio(
-        aspectRatio: 1.0,
-        child: buttonContent,
-      );
+      buttonContent = AspectRatio(aspectRatio: 1.0, child: buttonContent);
     }
 
     return GestureDetector(
@@ -125,10 +112,7 @@ class _AnimatedActionButtonState extends State<AnimatedActionButton>
       onTapCancel: _onTapCancel,
       child: ScaleTransition(
         scale: _scaleAnimation,
-        child: Tooltip(
-          message: widget.tooltip,
-          child: buttonContent,
-        ),
+        child: Tooltip(message: widget.tooltip, child: buttonContent),
       ),
     );
   }
